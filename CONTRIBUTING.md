@@ -13,7 +13,7 @@ The following guidelines are for contributing to the ops repository hosted on Gi
 
 ## **Table of Contents**
 
-- [**How to Contribute to DevOps**](#how-to-contribute-to-ops)
+- [**How to Contribute to DevOps**](#how-to-contribute-to-devops)
   - [**Table of Contents**](#table-of-contents)
   - [**Setting up the local development environment**](#setting-up-the-local-development-environment)
   - [**Fork the repository**](#fork-the-repository)
