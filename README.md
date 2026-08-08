@@ -3,9 +3,9 @@
 Welcome to the DevOps Community of Practice. We are happy you are here! 
 please Visit the below links for more info: 
 
-| [WIKI](https://github.com/hackforla/ops/wiki)                                   | for additional community info.                                      |
+| [WIKI](https://github.com/hackforla/devops/wiki)                                | for additional community info.                                      |
 |---------------------------------------------------------------------------------|---------------------------------------------------------------------|
-| [CONTRIBUTING.md](https://github.com/hackforla/ops/blob/master/CONTRIBUTING.md) | guidelines for contributing to the ops repository hosted on GitHub. |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                                              | guidelines for contributing to the devops repository hosted on GitHub. |
 
 <br>
 <br>
