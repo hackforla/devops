@@ -1,4 +1,4 @@
-# **How to Contribute to Ops**
+# **How to Contribute to DevOps**
 
 Thank you for taking the time to contribute!
 
@@ -13,7 +13,7 @@ The following guidelines are for contributing to the ops repository hosted on Gi
 
 ## **Table of Contents**
 
-- [**How to Contribute to Ops**](#how-to-contribute-to-ops)
+- [**How to Contribute to DevOps**](#how-to-contribute-to-devops)
   - [**Table of Contents**](#table-of-contents)
   - [**Setting up the local development environment**](#setting-up-the-local-development-environment)
   - [**Fork the repository**](#fork-the-repository)
@@ -176,7 +176,7 @@ Choose a branch name that:
 - relates to the issue (No spaces!)
 - includes the issue number
 
-For example, if you create a new issue branch for [Add a CONTRIBUTING.md to the Ops repo #120](https://github.com/hackforla/ops/issues/120):
+For example, if you create a new issue branch for [Add a CONTRIBUTING.md to the DevOps repo #120](https://github.com/hackforla/ops/issues/120):
 
 ```bash
 git checkout -b add-contributing-md-120
