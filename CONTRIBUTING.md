@@ -2,7 +2,7 @@
 
 Thank you for taking the time to contribute!
 
-The following guidelines are for contributing to the ops repository hosted on GitHub. These are intended as guidelines rather than strict rules. Please use your discretion, and don't hesitate to suggest changes to this document by submitting a pull request.
+The following guidelines are for contributing to the devops repository hosted on GitHub. These are intended as guidelines rather than strict rules. Please use your discretion, and don't hesitate to suggest changes to this document by submitting a pull request.
 
 **This guide assumes that you have finished the onboarding process, which involves joining the Hack for LA Slack, GitHub, and Google Drive. If you haven't completed onboarding yet, please visit the [Getting Started Page](https://www.hackforla.org/getting-started).**
 
@@ -34,23 +34,23 @@ The following guidelines are for contributing to the ops repository hosted on Gi
 
 ## **Fork the repository**
 
-Fork the hackforla/ops repository by clicking <a href="https://github.com/hackforla/ops/fork"> <button> <img src="https://user-images.githubusercontent.com/17777237/54873012-40fa5b00-4dd6-11e9-98e0-cc436426c720.png" width="8px"> Fork</button></a>
+Fork the hackforla/devops repository by clicking <a href="https://github.com/hackforla/devops/fork"> <button> <img src="https://user-images.githubusercontent.com/17777237/54873012-40fa5b00-4dd6-11e9-98e0-cc436426c720.png" width="8px"> Fork</button></a>
 . A fork is a copy of the repository that will be placed on your GitHub account.
 
 <details>
-  <summary><strong>Click here</strong> to see a visual example of the `fork` button within the ops repo</summary>
-  <p><strong>First, you find the `fork` button on the top right hand side of the [Hack for LA ops repo](https://github.com/hackforla/ops)</strong></h4>
+  <summary><strong>Click here</strong> to see a visual example of the `fork` button within the devops repo</summary>
+  <p><strong>First, you find the `fork` button on the top right hand side of the [Hack for LA devops repo](https://github.com/hackforla/devops)</strong></h4>
 
 ![Fork Button](./assets/images/fork.png)
 
- <p><strong>Next, you will be redirected to the create a fork page. [Hack for LA op repo](https://github.com/hackforla/ops/fork) Click on the Create fork button at the bottom<strong></p>
+ <p><strong>Next, you will be redirected to the create a fork page. [Hack for LA devops repo](https://github.com/hackforla/devops/fork) Click on the Create fork button at the bottom<strong></p>
  
 ![Create Fork](./assets/images/forkpage.png)
 </details><br>
 
-**Note:** It should create a URL that looks like the following -> `https://github.com/<your_GitHub_user_name>/ops`.
+**Note:** It should create a URL that looks like the following -> `https://github.com/<your_GitHub_user_name>/devops`.
 
-**For example** -> `https://github.com/octocat/ops`.
+**For example** -> `https://github.com/octocat/devops`.
 
 **Be Aware:** What you have created is a forked copy in a remote version on GitHub. It is not yet on your local machine yet.
 
@@ -78,19 +78,19 @@ cd hackforla
 and run the following commands:
 
 ```bash
-git clone https://github.com/<your_GitHub_user_name>/ops.git
+git clone https://github.com/<your_GitHub_user_name>/devops.git
 ```
 
 For example if your GitHub username was `octocat`:
 
 ```bash
-git clone https://github.com/octocat/ops.git
+git clone https://github.com/octocat/devops.git
 ```
 
-You should now have a new folder in your `hackforla` folder called `ops`. Verify this by changing into the new directory:
+You should now have a new folder in your `hackforla` folder called `devops`. Verify this by changing into the new directory:
 
 ```bash
-cd ops
+cd devops
 ```
 
 #### Clone repo (2): Verify `origin` remote url\*\*
@@ -101,22 +101,22 @@ Verify that your local cloned repository is pointing to the correct `origin` URL
 git remote -v
 ```
 
-You should see `fetch` and `push` URLs with links to your forked repository under your account (i.e. `https://github.com/<your_GitHub_user_name>/ops.git`). You are all set to make working changes to the website on your local machine.
+You should see `fetch` and `push` URLs with links to your forked repository under your account (i.e. `https://github.com/<your_GitHub_user_name>/devops.git`). You are all set to make working changes to the website on your local machine.
 
 However, we still need a way to keep our local repo up to date with the original repository. To do so, you must add an upstream remote to incorporate changes made while you are working on your local repo. Run the following to add an upstream remote URL & update your local repo with recent changes to the `origin master` branch:
 
 ```bash
-git remote add upstream https://github.com/hackforla/ops.git
+git remote add upstream https://github.com/hackforla/devops.git
 git fetch upstream
 ```
 
 After adding the upstream remote, you should now see it if you again run `git remote -v` :
 
 ```bash
-origin  https://github.com/<your_GitHub_user_name>/ops.git (fetch)
-origin  https://github.com/<your_GitHub_user_name>/ops.git (push)
-upstream        https://github.com/hackforla/ops.git (fetch)
-upstream        https://github.com/hackforla/ops.git (push)
+origin  https://github.com/<your_GitHub_user_name>/devops.git (fetch)
+origin  https://github.com/<your_GitHub_user_name>/devops.git (push)
+upstream        https://github.com/hackforla/devops.git (fetch)
+upstream        https://github.com/hackforla/devops.git (push)
 ```
 
 #### What if you accidentally cloned using the repository URL from the HackForLA Github (instead of the fork on your Github)?\*\*
@@ -126,13 +126,13 @@ upstream        https://github.com/hackforla/ops.git (push)
 Set your forked repo on your Github as an `origin` remote:
 
 ```bash
-git remote set-url origin https://github.com/<your_GitHub_user_name>/ops.git
+git remote set-url origin https://github.com/<your_GitHub_user_name>/devops.git
 ```
 
 For example if your GitHub username was `octocat`:
 
 ```bash
-git remote set-url origin https://github.com/octocat/ops.git
+git remote set-url origin https://github.com/octocat/devops.git
 ```
 
 ##### **ii. Resolve remote (2): Add an `upstream` remote**
@@ -140,7 +140,7 @@ git remote set-url origin https://github.com/octocat/ops.git
 Add a new remote named `upstream` that points to the `hackforla` repository version. This step will enable you to integrate changes from that repository later on.
 
 ```bash
-git remote add upstream https://github.com/hackforla/ops.git
+git remote add upstream https://github.com/hackforla/devops.git
 ```
 
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
@@ -176,7 +176,7 @@ Choose a branch name that:
 - relates to the issue (No spaces!)
 - includes the issue number
 
-For example, if you create a new issue branch for [Add a CONTRIBUTING.md to the DevOps repo #120](https://github.com/hackforla/ops/issues/120):
+For example, if you create a new issue branch for [Add a CONTRIBUTING.md to the DevOps repo #120](https://github.com/hackforla/devops/issues/120):
 
 ```bash
 git checkout -b add-contributing-md-120
