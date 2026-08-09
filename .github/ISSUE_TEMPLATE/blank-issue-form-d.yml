@@ -1,6 +1,7 @@
 name: "Blank Issue Form (w/ Dependency)"
 description: "Form version of HackforLA blank issue template with dependency"
-labels: ["Dependency"]
+labels: ['size: missing', 'role: missing', 'feature: missing', 'complexity: missing', 'milestone: missing', 'dependency', 'draft']
+projects: ['hackforla/73'] # CoP: DevOps: Project Board
 
 body:
   - type: textarea
@@ -37,6 +38,6 @@ body:
       label: "Resources/Instructions"
       description: "Provide links to resources or instructions that may help with this issue. This can include files to be worked on, external sites with solutions, documentation, etc."
       value: |
-        [Resources](https://github.com/hackforla/ops/wiki)
+        [Resources](https://github.com/hackforla/devops/wiki)
     validations:
       required: true
