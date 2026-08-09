@@ -1,6 +1,6 @@
 name: "Blank Issue Form (w/ Dependency)"
 description: "Form version of HackforLA blank issue template with dependency"
-labels: ['size: missing', 'role: missing', 'feature: missing', 'complexity: missing', 'milestone: missing', 'dependency', 'draft']
+labels: ['size: missing', 'role: missing', 'feature: missing', 'complexity: missing', 'milestone: missing', 'dependency']
 projects: ['hackforla/73'] # CoP: DevOps: Project Board
 
 body:
