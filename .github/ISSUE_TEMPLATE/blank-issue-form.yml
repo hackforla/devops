@@ -18,7 +18,7 @@ body:
     attributes:
       label: Action Items
       description: "List the research to be done, or the steps to be completed. Note: If the steps can be divided into tasks for more than one person, we recommend dividing it up into separate issues, or assigning it as a pair programming task."
-      value: |
+      placeholder: |
         - [ ] Item 1
         - [ ] Item 2
     validations:
@@ -28,7 +28,7 @@ body:
     attributes:
       label: "Resources/Instructions"
       description: "Provide links to resources or instructions that may help with this issue. This can include files to be worked on, external sites with solutions, documentation, etc."
-      value: |
+      placeholder: |
         [Resources](https://github.com/hackforla/devops/wiki)
     validations:
       required: true
