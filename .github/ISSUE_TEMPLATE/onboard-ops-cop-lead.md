@@ -26,7 +26,7 @@ We need to onboard [NEW LEAD NAME] onto the project.
 - [ ] GitHub
      - [ ] Add to team [write team](https://github.com/orgs/hackforla/teams/devops-write/members)
         - [ ] Change membership to maintainer
-     - [ ] Add to [read team](https://github.com/orgs/hackforla/teams/devops/members)
+     - [ ] Add to [read team](https://github.com/orgs/hackforla/teams/devops-read/members)
         - [ ] Change membership to maintainer
      - [ ] Check their github handle by assigning them to this issue, to see if they have added their name, so that you don't have to memorize their handle
 - [ ] 1password 
