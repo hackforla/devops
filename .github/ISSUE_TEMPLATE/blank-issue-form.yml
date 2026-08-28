@@ -31,4 +31,4 @@ body:
       placeholder: |
         [Resources](https://github.com/hackforla/devops/wiki)
     validations:
-      required: true
+      required: false
