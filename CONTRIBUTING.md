@@ -62,7 +62,15 @@ That plan comment is the *only* thing a reviewer has to look at — it is how we
 
 ### **Getting write access**
 
-Because you are pushing branches to the Hack for LA repository, you need write access to it. If `git push` is rejected with a permission error, that is what is missing — ask a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel.
+Because you are pushing branches to the Hack for LA repository, you need write access to it. If `git push` is rejected with a permission error, that is what is missing.
+
+**Write access is not something you request on its own.** It is not a form to fill in or a favour to ask a lead for, and picking up a ticket does not earn it. It comes with joining the DevOps Community of Practice:
+
+1. Say hello in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel and introduce yourself.
+2. Start coming to the weekly [DevOps CoP meeting](https://github.com/hackforla/devops/wiki/CoP-Meetings) — Wednesday evenings Pacific. That page has the current time and which weeks we skip.
+3. Once you are taking part, a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) will add you to the team, and write access comes with membership.
+
+We would rather you came to a meeting first and picked up a ticket second. If you have already written the change, nothing is wasted — bring it with you.
 
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
 
