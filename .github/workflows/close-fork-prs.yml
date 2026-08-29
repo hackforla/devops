@@ -1,0 +1,104 @@
+name: Close pull requests from forks
+
+# Hack for LA DevOps repos are contributed to by pushing a branch to the
+# repository itself, not from a fork. See CONTRIBUTING.md -> "Do not fork the
+# repository" for why: on incubator and devops-security a fork PR cannot run
+# `terraform plan`, so there is nothing for a reviewer to look at.
+#
+# Two ways to run:
+#   - automatically, when a pull request is opened or reopened from a fork
+#   - manually, from the Actions tab, over every open pull request at once
+#     (defaults to a dry run that closes nothing)
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run - list the pull requests that would be closed, close nothing"
+        type: boolean
+        default: true
+
+# SECURITY: this workflow uses `pull_request_target`, which runs with the base
+# repository's write-scoped token. It must therefore never check out, build, or
+# execute anything from the pull request, and must never interpolate
+# attacker-controlled values (branch name, title, body) into a shell command.
+# Nothing below checks out any code, and every value crossing into `run:` does
+# so through the environment rather than through ${{ }} expansion.
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  close-fork-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Work out which pull requests to close
+        id: collect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
+            # A pull request is from a fork exactly when its head repository is
+            # not this repository.
+            if [ "$PR_HEAD_REPO" != "$REPO" ]; then
+              echo "$PR_NUMBER" > prs.txt
+            else
+              : > prs.txt
+            fi
+          else
+            gh pr list --repo "$REPO" --state open --limit 500 \
+              --json number,isCrossRepository \
+              --jq '.[] | select(.isCrossRepository) | .number' > prs.txt
+          fi
+          echo "count=$(wc -l < prs.txt)" >> "$GITHUB_OUTPUT"
+          echo "Pull requests from forks found:"
+          cat prs.txt
+
+      - name: Close them, with an explanation
+        if: steps.collect.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          while read -r pr; do
+            [ -n "$pr" ] || continue
+            author=$(gh pr view "$pr" --repo "$REPO" --json author --jq .author.login)
+
+            message=$(cat <<EOF
+          Hi @${author} — thank you for the contribution, and apologies for the automated close. This is not a judgement on your change.
+
+          **Hack for LA DevOps repositories do not accept pull requests from forks.** We contribute by pushing a branch to the repository itself. Because this pull request came from a fork, it has been closed automatically.
+
+          **Why:** on \`incubator\` and \`devops-security\`, every pull request runs \`terraform plan\` against our AWS account so a reviewer can see what the change would do to live infrastructure before it is applied. GitHub deliberately withholds the credentials that needs from any workflow triggered by a fork, so a fork pull request produces no plan and there is nothing to review. We apply the same rule across all three repositories so there is one way of working.
+
+          **How to get this change in — your work is not lost:**
+
+          1. Ask a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel for write access to this repository.
+          2. Point your existing clone at this repository and push the branch you already have:
+             \`\`\`bash
+             git remote set-url origin https://github.com/${REPO}.git
+             git push --set-upstream origin \$(git branch --show-current)
+             \`\`\`
+          3. Open a new pull request from that branch.
+
+          The full walkthrough is in [CONTRIBUTING.md](https://github.com/hackforla/devops/blob/master/CONTRIBUTING.md#do-not-fork-the-repository). We do want your contribution — please come and say hello in #ops.
+          EOF
+          )
+
+            if [ "${DRY_RUN:-false}" = "true" ]; then
+              echo "DRY RUN: would close ${REPO}#${pr} by @${author}"
+            else
+              echo "Closing ${REPO}#${pr} by @${author}"
+              gh pr close "$pr" --repo "$REPO" --comment "$message"
+            fi
+          done < prs.txt
