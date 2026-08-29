@@ -2,67 +2,79 @@
 
 Thank you for taking the time to contribute!
 
-The following guidelines are for contributing to the ops repository hosted on GitHub. These are intended as guidelines rather than strict rules. Please use your discretion, and don't hesitate to suggest changes to this document by submitting a pull request.
+The following guidelines are for contributing to the devops repository hosted on GitHub. These are intended as guidelines rather than strict rules. Please use your discretion, and don't hesitate to suggest changes to this document by submitting a pull request.
+
+> ### ⚠️ **Do not fork. Work on a branch in the Hack for LA repository itself.**
+>
+> Every DevOps Community of Practice repository is contributed to the same way: you are given write access, you clone the Hack for LA repository directly, and you push a branch to it. You do **not** create a copy of the repository under your own GitHub account.
+>
+> For [**incubator**](https://github.com/hackforla/incubator), this is not just a convention — **a pull request opened from a fork cannot be accepted.** See [Do not fork the repository](#do-not-fork-the-repository) below for what breaks and why.
 
 **This guide assumes that you have finished the onboarding process, which involves joining the Hack for LA Slack, GitHub, and Google Drive. If you haven't completed onboarding yet, please visit the [Getting Started Page](https://www.hackforla.org/getting-started).**
 
 **The team recommends using [VS Code](https://code.visualstudio.com/download) as the preferred text editor for working on code, but feel free to utilize a text editor of your preference.**
 
 **If you have any additional questions about your contribution process, please feel free to reach out to the team in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel.**
+
+**For more about how the DevOps CoP works — who the leads are, how we meet, and how permissions are handled — see the [DevOps wiki](https://github.com/hackforla/devops/wiki).**
 <br><br>
 
 ## **Table of Contents**
 
 - [**How to Contribute to DevOps**](#how-to-contribute-to-devops)
   - [**Table of Contents**](#table-of-contents)
+  - [**Do not fork the repository**](#do-not-fork-the-repository)
+    - [**Why incubator pull requests from a fork cannot be accepted**](#why-incubator-pull-requests-from-a-fork-cannot-be-accepted)
+    - [**Getting write access**](#getting-write-access)
   - [**Setting up the local development environment**](#setting-up-the-local-development-environment)
-  - [**Fork the repository**](#fork-the-repository)
   - [**Clone (Create) a copy on your computer**](#clone-create-a-copy-on-your-computer)
-    - [Clone repo (1): Create `hackforla` folder\*\*](#clone-repo-1-create-hackforla-folder)
-    - [Clone repo (2): Verify `origin` remote url\*\*](#clone-repo-2-verify-origin-remote-url)
-    - [What if you accidentally cloned using the repository URL from the HackForLA Github (instead of the fork on your Github)?\*\*](#what-if-you-accidentally-cloned-using-the-repository-url-from-the-hackforla-github-instead-of-the-fork-on-your-github)
-      - [**i. Resolve remote (1): reset `origin` remote url**](#i-resolve-remote-1-reset-origin-remote-url)
-      - [**ii. Resolve remote (2): Add an `upstream` remote**](#ii-resolve-remote-2-add-an-upstream-remote)
+    - [Clone repo (1): Create `hackforla` folder](#clone-repo-1-create-hackforla-folder)
+    - [Clone repo (2): Verify `origin` remote url](#clone-repo-2-verify-origin-remote-url)
   - [**Working on an issue**](#working-on-an-issue)
     - [**Working on an issue (1): Verify current branch is `master`**](#working-on-an-issue-1-verify-current-branch-is-master)
     - [**Working on an issue (2): Create a new branch where you will work on your issue**](#working-on-an-issue-2-create-a-new-branch-where-you-will-work-on-your-issue)
     - [Branch name convention](#branch-name-convention)
-    - [**Working on an issue(3): Prepare your changes to push to your repository**](#working-on-an-issue3-prepare-your-changes-to-push-to-your-repository)
+    - [**Working on an issue (3): Prepare your changes to push to the repository**](#working-on-an-issue-3-prepare-your-changes-to-push-to-the-repository)
+    - [**Working on an issue (4): Pulling the latest changes before you push**](#working-on-an-issue-4-pulling-the-latest-changes-before-you-push)
   - [**Making a pull request**](#making-a-pull-request)
 
-## **Setting up the local development environment**
+## **Do not fork the repository**
 
-## **Fork the repository**
+Read this before you clone anything. Getting it wrong means redoing your setup, and on one repository it means your pull request cannot be merged at all.
 
-Fork the hackforla/ops repository by clicking <a href="https://github.com/hackforla/ops/fork"> <button> <img src="https://user-images.githubusercontent.com/17777237/54873012-40fa5b00-4dd6-11e9-98e0-cc436426c720.png" width="8px"> Fork</button></a>
-. A fork is a copy of the repository that will be placed on your GitHub account.
+You contribute to a DevOps CoP repository by pushing a branch **to that repository**, not to a fork:
 
-<details>
-  <summary><strong>Click here</strong> to see a visual example of the `fork` button within the ops repo</summary>
-  <p><strong>First, you find the `fork` button on the top right hand side of the [Hack for LA ops repo](https://github.com/hackforla/ops)</strong></h4>
+- ✅ `git clone https://github.com/hackforla/devops.git` — then branch, commit, push, and open the pull request from your branch.
+- ❌ Clicking **Fork**, cloning `https://github.com/<your_GitHub_user_name>/devops.git`, and opening a pull request from your copy.
 
-![Fork Button](./assets/images/fork.png)
+This applies to all three DevOps CoP repositories — [devops](https://github.com/hackforla/devops), [devops-security](https://github.com/hackforla/devops-security), and [incubator](https://github.com/hackforla/incubator).
 
- <p><strong>Next, you will be redirected to the create a fork page. [Hack for LA op repo](https://github.com/hackforla/ops/fork) Click on the Create fork button at the bottom<strong></p>
- 
-![Create Fork](./assets/images/forkpage.png)
-</details><br>
+### **Why incubator pull requests from a fork cannot be accepted**
 
-**Note:** It should create a URL that looks like the following -> `https://github.com/<your_GitHub_user_name>/ops`.
+On [incubator](https://github.com/hackforla/incubator) (and [devops-security](https://github.com/hackforla/devops-security)), every pull request automatically runs `terraform plan`, and that workflow has to authenticate to AWS to do it. **GitHub deliberately withholds repository secrets and the OIDC token from a workflow run triggered by a pull request that comes from a fork**, and it downgrades the workflow's token to read-only.
 
-**For example** -> `https://github.com/octocat/ops`.
+The result is that a pull request opened from a fork:
 
-**Be Aware:** What you have created is a forked copy in a remote version on GitHub. It is not yet on your local machine yet.
+- cannot run the Terraform plan, and
+- cannot post the plan back as a comment on the pull request.
+
+That plan comment is the *only* thing a reviewer has to look at — it is how we see what your change would actually do to live infrastructure before it is applied. Without it there is nothing to review, so the pull request cannot be approved or merged. This is a limitation of how GitHub protects secrets, not something a reviewer can override or re-run for you.
+
+### **Getting write access**
+
+Because you are pushing branches to the Hack for LA repository, you need write access to it. If `git push` is rejected with a permission error, that is what is missing — ask a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel.
 
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
+
+## **Setting up the local development environment**
 
 ### **Clone (Create) a copy on your computer**
 
 Before creating a copy to your local machine, you must have Git installed. You can find instructions for installing Git for your operating system [**here**](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
 
-The following steps will clone (create) a local copy of the forked repository on your computer.
+The following steps will clone (create) a local copy of the Hack for LA repository on your computer.
 
-#### Clone repo (1): Create `hackforla` folder\*\*
+#### Clone repo (1): Create `hackforla` folder
 
 Create a new folder on your computer that will contain `hackforla` projects.
 
@@ -75,92 +87,59 @@ mkdir hackforla
 cd hackforla
 ```
 
-and run the following commands:
+and run the following command:
 
 ```bash
-git clone https://github.com/<your_GitHub_user_name>/ops.git
+git clone https://github.com/hackforla/devops.git
 ```
 
-For example if your GitHub username was `octocat`:
+You should now have a new folder in your `hackforla` folder called `devops`. Verify this by changing into the new directory:
 
 ```bash
-git clone https://github.com/octocat/ops.git
+cd devops
 ```
 
-You should now have a new folder in your `hackforla` folder called `ops`. Verify this by changing into the new directory:
+#### Clone repo (2): Verify `origin` remote url
 
-```bash
-cd ops
-```
-
-#### Clone repo (2): Verify `origin` remote url\*\*
-
-Verify that your local cloned repository is pointing to the correct `origin` URL (that is, the forked repo on your own Github account):
+Verify that your local cloned repository is pointing to the correct `origin` URL — the Hack for LA repository, **not** a copy under your own account:
 
 ```bash
 git remote -v
 ```
 
-You should see `fetch` and `push` URLs with links to your forked repository under your account (i.e. `https://github.com/<your_GitHub_user_name>/ops.git`). You are all set to make working changes to the website on your local machine.
-
-However, we still need a way to keep our local repo up to date with the original repository. To do so, you must add an upstream remote to incorporate changes made while you are working on your local repo. Run the following to add an upstream remote URL & update your local repo with recent changes to the `origin master` branch:
+You should see `fetch` and `push` URLs that both point at `https://github.com/hackforla/devops.git`:
 
 ```bash
-git remote add upstream https://github.com/hackforla/ops.git
-git fetch upstream
+origin  https://github.com/hackforla/devops.git (fetch)
+origin  https://github.com/hackforla/devops.git (push)
 ```
 
-After adding the upstream remote, you should now see it if you again run `git remote -v` :
+If instead you see a URL with your own GitHub username in it, you cloned a fork. Point `origin` back at the Hack for LA repository:
 
 ```bash
-origin  https://github.com/<your_GitHub_user_name>/ops.git (fetch)
-origin  https://github.com/<your_GitHub_user_name>/ops.git (push)
-upstream        https://github.com/hackforla/ops.git (fetch)
-upstream        https://github.com/hackforla/ops.git (push)
+git remote set-url origin https://github.com/hackforla/devops.git
 ```
 
-#### What if you accidentally cloned using the repository URL from the HackForLA Github (instead of the fork on your Github)?\*\*
-
-##### **i. Resolve remote (1): reset `origin` remote url**
-
-Set your forked repo on your Github as an `origin` remote:
-
-```bash
-git remote set-url origin https://github.com/<your_GitHub_user_name>/ops.git
-```
-
-For example if your GitHub username was `octocat`:
-
-```bash
-git remote set-url origin https://github.com/octocat/ops.git
-```
-
-##### **ii. Resolve remote (2): Add an `upstream` remote**
-
-Add a new remote named `upstream` that points to the `hackforla` repository version. This step will enable you to integrate changes from that repository later on.
-
-```bash
-git remote add upstream https://github.com/hackforla/ops.git
-```
+There is no `upstream` remote to add. Because `origin` *is* the Hack for LA repository, you pull from and push to the same place, and there is nothing to keep in sync.
 
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
 
 ### **Working on an issue**
 
-For each issue you address, create a new branch. Working on topic branches ensures that your main branch(named `main`) remains untouched and makes it easier to synchronize your fork with the main project.
+For each issue you address, create a new branch. Working on topic branches keeps the default branch (named `master`) untouched and keeps your work separate from everyone else's.
 
-#### **Working on an issue (1): Verify current branch is `main`**
+#### **Working on an issue (1): Verify current branch is `master`**
 
-first make sure you are on the main branch.
+first make sure you are on the master branch.
 
 ```bash
-git checkout main
+git checkout master
 ```
 
-Update your main branch with the latest changes
+Update your master branch with the latest changes
 
-```
-git pull upstream main
+```bash
+git pull
 ```
 
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
@@ -176,7 +155,7 @@ Choose a branch name that:
 - relates to the issue (No spaces!)
 - includes the issue number
 
-For example, if you create a new issue branch for [Add a CONTRIBUTING.md to the DevOps repo #120](https://github.com/hackforla/ops/issues/120):
+For example, if you create a new issue branch for [Add a CONTRIBUTING.md to the DevOps repo #120](https://github.com/hackforla/devops/issues/120):
 
 ```bash
 git checkout -b add-contributing-md-120
@@ -188,7 +167,7 @@ Here `add-contributing-md-120` is your branch name
 
 **Note:** Git uses spaces as delimiters in various commands, so branch names cannot contain spaces.
 
-#### **Working on an issue(3): Prepare your changes to push to your repository**
+#### **Working on an issue (3): Prepare your changes to push to the repository**
 
 ##### **i. Prepare repo changes (1): Use the `git add` command to stage your changes.**
 
@@ -224,15 +203,15 @@ To commit your changes with a message, run:
 git commit -m “your commit message”
 ```
 
-#### **Working on an issue(4): Pulling from upstream before you push**
+#### **Working on an issue (4): Pulling the latest changes before you push**
 
-**IMPORTANT:** Before you push your local commits to your repository, sync your fork with the `master` branch of the `origin` remote repository. Use `git pull upstream` to ensure your local repository is up-to-date with the `master` branch of the `origin` remote repository.
+**IMPORTANT:** Before you push your local commits, bring your branch up to date with the `master` branch of the repository, so that you are not opening a pull request against stale code.
 
 ```bash
-git pull upstream
+git pull origin master
 ```
 
-After committing your changes locally, you can use below commands to push your committed changes to a remote repository, making them accessible to others working on the same projects.
+After committing your changes locally, use the command below to push your branch to the Hack for LA repository, making it available for a pull request:
 
 ```bash
 git push --set-upstream origin add-contributing-md-120
@@ -241,6 +220,8 @@ git push --set-upstream origin add-contributing-md-120
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
 
 ### **Making a pull request**
+
+Open the pull request from your branch on the Hack for LA repository into `master`.
 
 ##### **i. Complete pull request (1): Update pull request title**
 
