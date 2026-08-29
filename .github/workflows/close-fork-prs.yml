@@ -83,8 +83,8 @@ jobs:
 
           **How to get this change in — your work is not lost:**
 
-          1. Ask a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel for write access to this repository.
-          2. Point your existing clone at this repository and push the branch you already have:
+          1. **Join the DevOps Community of Practice.** Write access is not something you can request on its own, and asking a lead for it will not get you added. It comes with actually being part of the team: introduce yourself in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel and start coming to our weekly [CoP meeting](https://github.com/hackforla/devops/wiki/CoP-Meetings) (Wednesday evenings Pacific — check that page for the current time and which weeks we skip). Once you are taking part, a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) will add you to the team, and write access comes with it.
+          2. Once you have been added, point your existing clone at this repository and push the branch you already have:
              \`\`\`bash
              git remote set-url origin https://github.com/${REPO}.git
              git push --set-upstream origin \$(git branch --show-current)
