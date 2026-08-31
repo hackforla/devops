@@ -132,6 +132,19 @@ every run so the output cannot be read without them.
 - **ECS task definitions** are reported as the current revision per family, not
   as every historical revision. There were 286 active revisions at the time of
   writing; the family's current revision is the meaningful unit.
+- **Lambda layers** are reported as the layer, not as every layer version, for
+  the same reason. This is not a choice about granularity so much as what the
+  API allows: `lambda list-tags` accepts `arn:...:layer:<name>` and rejects
+  `arn:...:layer:<name>:<version>` with a `ValidationException`, so the version
+  cannot carry `managed-by` at all.
+- **The tagging API supplement drops ARNs that are not durable resources.** The
+  supplement has no type filter, so it returns things Terraform could never own.
+  SSM sessions are the case that prompted the skip list: every
+  `ecs execute-command` leaves one in session history, and each was landing in
+  the report as an untagged, therefore unmanaged, resource. They age out on
+  their own, which makes them worse than a leak — the denominator moved
+  depending on whether anyone had shelled into a container recently. Add to
+  `$script:TaggingApiSkipPatterns` if another such type turns up.
 
 ### Read-only
 

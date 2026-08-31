@@ -323,6 +323,17 @@ function Add-IamResources {
             $count++
             continue
         }
+        # IAM Identity Center owns everything under /aws-reserved/. These roles
+        # are provisioned from permission sets and re-provisioned whenever the
+        # permission set changes, which discards any tag written here, so they
+        # cannot hold managed-by even though the tagging API accepts one.
+        if ($role.Path -like '/aws-reserved/*') {
+            Add-Resource -Arn $role.Arn -Source 'iam:list-roles' -Service 'iam' `
+                         -Type 'role' -ResourceRegion 'global' -Untaggable `
+                         -Note 'IAM Identity Center reserved role'
+            $count++
+            continue
+        }
         $managedBy = Get-ManagedByFromCall -Arguments @('iam', 'list-role-tags', '--role-name', $role.RoleName)
         Add-Resource -Arn $role.Arn -ManagedBy $managedBy -Source 'iam:list-roles' `
                      -Service 'iam' -Type 'role' -ResourceRegion 'global'
@@ -504,6 +515,22 @@ function Add-LambdaResources {
         Add-Resource -Arn $function.FunctionArn -ManagedBy $managedBy `
                      -Source 'lambda:list-functions' -Service 'lambda' `
                      -Type 'function' -ResourceRegion $SweepRegion
+        $count++
+    }
+
+    # Layers are a separate resource from the functions that use them, and the
+    # tagging API does not return them, so without this they were invisible.
+    # The taggable unit is the layer, not the layer version: ListTags accepts
+    # arn:...:layer:<name> and rejects arn:...:layer:<name>:<version>. Versions
+    # are therefore counted through their layer, the same way task definition
+    # revisions are counted through their family.
+    foreach ($layer in @((Invoke-AwsCli -Arguments @('lambda', 'list-layers', '--region', $SweepRegion)).Layers)) {
+        if ($null -eq $layer) { continue }
+        $managedBy = Get-ManagedByFromCall -AsMap -Arguments @(
+            'lambda', 'list-tags', '--resource', $layer.LayerArn, '--region', $SweepRegion)
+        Add-Resource -Arn $layer.LayerArn -ManagedBy $managedBy `
+                     -Source 'lambda:list-layers' -Service 'lambda' `
+                     -Type 'layer' -ResourceRegion $SweepRegion
         $count++
     }
     return $count
@@ -829,19 +856,46 @@ function Add-CloudTrailResources {
 # Tagging API - supplement only, run last so native results win on overlap
 # ---------------------------------------------------------------------------
 
+# The tagging API has no type filter and returns some things that are not
+# durable resources. Anything matching one of these is dropped rather than
+# classified, because it can never carry managed-by and is not something
+# Terraform could own.
+#
+# SSM sessions are the case that prompted this. Every `ecs execute-command`
+# leaves a session in SSM's history, the tagging API returns it, and it lands in
+# the report as an untagged - therefore unmanaged - resource. They age out of
+# session history on their own, so this is not a slow leak; it is something
+# worse for a metric, because the denominator moves depending on whether anyone
+# happened to shell into a container in the days before the run. Two runs on
+# 2026-08-31 differed for exactly this reason.
+$script:TaggingApiSkipPatterns = @(
+    'arn:aws:ssm:*:*:session/*'      # a transient action, not a resource
+)
+
+function Test-TaggingApiSkip {
+    param([string]$Arn)
+    foreach ($pattern in $script:TaggingApiSkipPatterns) {
+        if ($Arn -like $pattern) { return $true }
+    }
+    return $false
+}
+
 function Add-TaggingApiResources {
     param([string]$SweepRegion)
 
     Write-Step "tagging API supplement ($SweepRegion)"
     $before = $script:Resources.Count
+    $skipped = 0
     $result = Invoke-AwsCli -Arguments @('resourcegroupstaggingapi', 'get-resources', '--region', $SweepRegion)
     foreach ($item in @($result.ResourceTagMappingList)) {
         if ($null -eq $item) { continue }
+        if (Test-TaggingApiSkip -Arn $item.ResourceARN) { $skipped++; continue }
         Add-Resource -Arn $item.ResourceARN -ManagedBy (Get-TagValueFromPairs -Pairs $item.Tags) `
                      -Source 'tagging-api'
     }
     $added = $script:Resources.Count - $before
-    Write-Host "$added new"
+    if ($skipped -gt 0) { Write-Host "$added new, $skipped skipped" }
+    else { Write-Host "$added new" }
     return $added
 }
 
@@ -941,7 +995,12 @@ function Write-CoverageReport {
           'than a fact. Nothing here verifies that an exempt resource is genuinely',
           'one Terraform should not manage.'),
         @('ECS task definitions are reported as the current revision per family,',
-          'not as every historical revision.')
+          'not as every historical revision. Lambda layers are reported as the',
+          'layer, not as every layer version, for the same reason: the layer is',
+          'the unit ListTags accepts.'),
+        @('The tagging API supplement drops ARNs that are not durable resources,',
+          'currently SSM sessions. They cannot carry managed-by and would',
+          'otherwise move the denominator run to run.')
     )
     foreach ($spot in $blindSpots) {
         Write-Host "  - $($spot[0])"
