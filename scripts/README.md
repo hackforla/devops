@@ -18,8 +18,13 @@ default tag on the resources it creates:
 | [`hackforla/incubator`](https://github.com/hackforla/incubator) | `managed-by = terraform-incubator` |
 | [`hackforla/devops-security`](https://github.com/hackforla/devops-security) | `managed-by = terraform-devops-security` |
 
-So the absence of that tag is the signal that nothing manages a resource. This
-script sweeps the account, reads the tag, and buckets everything three ways.
+A third value, `managed-by = exempt`, marks a resource that is deliberately
+outside Terraform. Unlike the two above it is applied by hand rather than by a
+provider, because by definition no Terraform run will ever touch the resource.
+
+So the absence of any of those values is the signal that nothing manages a
+resource. This script sweeps the account, reads the tag, and buckets everything
+four ways.
 
 This is a **tag sweep, not a Terraform state diff**. Read
 [Blind spots](#blind-spots) before treating the output as an inventory.
@@ -58,9 +63,17 @@ under-reports.
   positives. Currently: IAM groups (AWS exposes no group tagging API at all),
   AWS-managed KMS keys, AWS service-linked IAM roles, and the AWS-owned
   `FARGATE` / `FARGATE_SPOT` ECS capacity providers.
+- **`exempt`** — carrying `managed-by = exempt`, and likewise excluded from the
+  ratio. These are resources Terraform deliberately does not manage, so counting
+  them as unmanaged would make them permanent false positives in the same way
+  untaggable ones would. The clearest case is `hackforla/devops-security`'s own
+  CI identity and state backend: Terraform managing the credentials and the
+  bucket it unlocks is a lockout risk. Note the difference from `untaggable` —
+  that bucket is a fact about AWS, this one is an assertion someone made by
+  hand, and nothing here checks it.
 - **Tagged with an unrecognised `managed-by` value** — appears only when
-  something stamped a provenance tag that is neither repo's. Worth investigating
-  when it shows up.
+  something stamped a provenance tag that is neither repo's and is not `exempt`.
+  Worth investigating when it shows up.
 
 ### Why it does not just use the Resource Groups Tagging API
 
