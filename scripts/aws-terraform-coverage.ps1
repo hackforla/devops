@@ -22,7 +22,9 @@
     collectors missed.
 
     Resource types that can never carry a tag are reported as their own category
-    so they do not read as unmanaged forever.
+    so they do not read as unmanaged forever. Resources deliberately kept out of
+    Terraform carry `managed-by = exempt`, applied by hand rather than by any
+    provider, and are excluded from the ratio for the same reason.
 
     Read the "Blind spots" section of README.md before treating the output as a
     complete inventory.
@@ -71,6 +73,7 @@ $ErrorActionPreference = 'Stop'
 $script:TagKey              = 'managed-by'
 $script:IncubatorValue      = 'terraform-incubator'
 $script:DevOpsSecurityValue = 'terraform-devops-security'
+$script:ExemptValue         = 'exempt'
 $script:ReadOnlyVerbPattern = '^(describe|list|get)-'
 
 # ---------------------------------------------------------------------------
@@ -215,6 +218,7 @@ function Get-CoverageBucket {
 
     if ($ManagedBy -eq $script:IncubatorValue)      { return $script:IncubatorValue }
     if ($ManagedBy -eq $script:DevOpsSecurityValue) { return $script:DevOpsSecurityValue }
+    if ($ManagedBy -eq $script:ExemptValue)         { return $script:ExemptValue }
     return 'unmanaged'
 }
 
@@ -854,8 +858,12 @@ function Write-Section {
 
 function Write-CoverageReport {
     $all        = @($script:Resources)
-    $taggable   = @($all | Where-Object { $_.Bucket -ne 'untaggable' })
     $untaggable = @($all | Where-Object { $_.Bucket -eq 'untaggable' })
+    $exempt     = @($all | Where-Object { $_.Bucket -eq $script:ExemptValue })
+    # Exempt resources are deliberately outside Terraform, so counting them as
+    # unmanaged would make them permanent false positives - the same argument that
+    # keeps untaggable out of the ratio. Both are excluded from it here.
+    $taggable   = @($all | Where-Object { $_.Bucket -ne 'untaggable' -and $_.Bucket -ne $script:ExemptValue })
     $incubator  = @($taggable | Where-Object { $_.Bucket -eq $script:IncubatorValue })
     $security   = @($taggable | Where-Object { $_.Bucket -eq $script:DevOpsSecurityValue })
     $unmanaged  = @($taggable | Where-Object { $_.Bucket -eq 'unmanaged' })
@@ -870,10 +878,12 @@ function Write-CoverageReport {
         [pscustomobject]@{ Bucket = $script:IncubatorValue;      Resources = $incubator.Count }
         [pscustomobject]@{ Bucket = $script:DevOpsSecurityValue; Resources = $security.Count }
         [pscustomobject]@{ Bucket = 'unmanaged';                 Resources = $unmanaged.Count }
+        [pscustomobject]@{ Bucket = $script:ExemptValue;         Resources = $exempt.Count }
     ) | Format-Table -AutoSize | Out-String | Write-Host
 
-    Write-Host ("  {0} of {1} taggable resources carry a managed-by tag ({2}%)." -f $managed, $total, $percent)
+    Write-Host ("  {0} of {1} in-scope resources carry a managed-by tag ({2}%)." -f $managed, $total, $percent)
     Write-Host ("  {0} further resources cannot be tagged at all and are excluded from that ratio." -f $untaggable.Count)
+    Write-Host ("  {0} are tagged managed-by=exempt and are excluded from it as well." -f $exempt.Count)
 
     # A managed-by value that is neither repo's means something stamped a
     # provenance tag we do not recognise, which is worth surfacing on its own.
@@ -892,6 +902,10 @@ function Write-CoverageReport {
             Select-Object @{ n = 'Service/Type'; e = { $_.Name -replace ', ', '/' } }, Count |
             Format-Table -AutoSize | Out-String | Write-Host
     }
+
+    Write-Section 'Exempt (deliberately outside Terraform, not counted as unmanaged)'
+    if ($exempt.Count -eq 0) { Write-Host '  none' }
+    else { $exempt | Sort-Object Service, Type, Arn | ForEach-Object { Write-Host "  $($_.Arn)" } }
 
     Write-Section 'Untaggable (reported separately, not counted as unmanaged)'
     if ($untaggable.Count -eq 0) { Write-Host '  none' }
@@ -923,6 +937,9 @@ function Write-CoverageReport {
           'still read as unmanaged until some later apply touches it.'),
         @('This says nothing about the reverse direction: a resource in Terraform',
           'state that no longer exists in AWS.'),
+        @('managed-by=exempt is applied by hand, so it records an intention rather',
+          'than a fact. Nothing here verifies that an exempt resource is genuinely',
+          'one Terraform should not manage.'),
         @('ECS task definitions are reported as the current revision per family,',
           'not as every historical revision.')
     )
