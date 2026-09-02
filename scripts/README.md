@@ -57,20 +57,48 @@ under-reports.
 - **`terraform-incubator` / `terraform-devops-security`** — managed, and by which repo.
 - **`unmanaged`** — taggable, but carrying no recognised `managed-by` value. This
   is the number the report exists to surface.
-- **`untaggable`** — reported separately and deliberately excluded from the
+- **`unmanageable`** — reported separately and deliberately excluded from the
   managed/unmanaged ratio, because these can never carry the tag no matter what
   anyone does. Counting them as unmanaged would make them permanent false
-  positives. Currently: IAM groups (AWS exposes no group tagging API at all),
-  AWS-managed KMS keys, AWS service-linked IAM roles, and the AWS-owned
-  `FARGATE` / `FARGATE_SPOT` ECS capacity providers.
+  positives. Three different things put a resource here:
+  - **AWS exposes no way to tag it.** IAM groups have no group tagging API at all.
+  - **AWS owns it.** AWS-managed KMS keys, service-linked IAM roles, the
+    `FARGATE` / `FARGATE_SPOT` ECS capacity providers, elastic IPs an ELB
+    allocated for itself (`ServiceManaged`), and EventBridge rules an AWS service
+    created for itself (a rule with its own `ManagedBy` field, which is what
+    `ecs.amazonaws.com` does for a capacity provider).
+  - **Terraform cannot own or tag it, even though AWS could.** This is the
+    subtle group, and every member of it is a resource that may well *be* under
+    Terraform management while still reading as untagged:
+    - **Autoscaling groups.** An ASG's tags are a separate schema carrying
+      `propagate_at_launch`, and the AWS provider does not merge `default_tags`
+      into it. No apply will ever put the tag there.
+    - **Rules of a VPC's default security group.** `aws_default_security_group`
+      holds its rules inline, so they are not resources of their own and nothing
+      tags them. Note the group itself *is* taggable and stays in the ratio.
+    - **Listener default rules.** A listener's default rule is its
+      `default_action`, not an `aws_lb_listener_rule`.
+    - **Instances and volumes an autoscaling group launched.** Terraform should
+      not import these — it would fight the ASG and hold state that goes stale on
+      the next replacement.
+    - **`/aws/lambda/*` log groups.** Lambda creates these on first invocation,
+      before any `aws_cloudwatch_log_group` could exist.
+    - **`default.*` RDS parameter groups.** AWS reserves the name and creates one
+      per engine family itself. They cannot be modified or deleted, so nothing
+      can adopt them.
+
+  **This bucket was called `untaggable` until 2026-09-02**, when the third group
+  above was added. If you are comparing against a run from before that date, the
+  ratio moved partly because the denominator shrank — not because anything was
+  brought under management.
 - **`exempt`** — carrying `managed-by = exempt`, and likewise excluded from the
   ratio. These are resources Terraform deliberately does not manage, so counting
   them as unmanaged would make them permanent false positives in the same way
-  untaggable ones would. The clearest case is `hackforla/devops-security`'s own
+  unmanageable ones would. The clearest case is `hackforla/devops-security`'s own
   CI identity and state backend: Terraform managing the credentials and the
-  bucket it unlocks is a lockout risk. Note the difference from `untaggable` —
-  that bucket is a fact about AWS, this one is an assertion someone made by
-  hand, and nothing here checks it.
+  bucket it unlocks is a lockout risk. Note the difference from `unmanageable` —
+  that bucket is a fact about AWS or about the provider, this one is an assertion
+  someone made by hand, and nothing here checks it.
 - **Tagged with an unrecognised `managed-by` value** — appears only when
   something stamped a provenance tag that is neither repo's and is not `exempt`.
   Worth investigating when it shows up.
