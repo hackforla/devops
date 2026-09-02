@@ -45,7 +45,7 @@
     stop, so the script can be reused against another account deliberately.
 
 .PARAMETER ListArns
-    List every unmanaged and untaggable ARN, not just the per-service counts.
+    List every unmanaged and unmanageable ARN, not just the per-service counts.
 
 .PARAMETER CsvPath
     Also write the full classified resource list to this path as CSV.
@@ -262,7 +262,7 @@ function Add-Resource {
         [string]$Service,
         [string]$Type,
         [string]$ResourceRegion,
-        [switch]$Untaggable,
+        [switch]$Unmanageable,
         [string]$Note
     )
 
@@ -276,7 +276,7 @@ function Add-Resource {
         if (-not $ResourceRegion) { $ResourceRegion = $parsed.Region }
     }
 
-    if ($Untaggable) { $bucket = 'untaggable' }
+    if ($Unmanageable) { $bucket = 'unmanageable' }
     else { $bucket = Get-CoverageBucket -ManagedBy $ManagedBy }
 
     $null = $script:Resources.Add([pscustomobject]@{
@@ -318,7 +318,7 @@ function Add-IamResources {
         # anything in either Terraform repo.
         if ($role.Path -like '/aws-service-role/*') {
             Add-Resource -Arn $role.Arn -Source 'iam:list-roles' -Service 'iam' `
-                         -Type 'role' -ResourceRegion 'global' -Untaggable `
+                         -Type 'role' -ResourceRegion 'global' -Unmanageable `
                          -Note 'AWS service-linked role'
             $count++
             continue
@@ -329,7 +329,7 @@ function Add-IamResources {
         # cannot hold managed-by even though the tagging API accepts one.
         if ($role.Path -like '/aws-reserved/*') {
             Add-Resource -Arn $role.Arn -Source 'iam:list-roles' -Service 'iam' `
-                         -Type 'role' -ResourceRegion 'global' -Untaggable `
+                         -Type 'role' -ResourceRegion 'global' -Unmanageable `
                          -Note 'IAM Identity Center reserved role'
             $count++
             continue
@@ -364,7 +364,7 @@ function Add-IamResources {
     foreach ($group in @((Invoke-AwsCli -Arguments @('iam', 'list-groups')).Groups)) {
         if ($null -eq $group) { continue }
         Add-Resource -Arn $group.Arn -Source 'iam:list-groups' -Service 'iam' `
-                     -Type 'group' -ResourceRegion 'global' -Untaggable `
+                     -Type 'group' -ResourceRegion 'global' -Unmanageable `
                      -Note 'IAM groups have no AWS tagging API'
         $count++
     }
@@ -429,29 +429,99 @@ function Add-Ec2Resources {
         @{ Type = 'elastic-ip';       Arguments = @('ec2', 'describe-addresses');         Property = 'Addresses';        Id = 'AllocationId' }
     )
 
-    foreach ($collector in $collectors) {
-        $response = Invoke-AwsCli -Arguments ($collector.Arguments + @('--region', $SweepRegion))
-        foreach ($item in @($response.($collector.Property))) {
-            if ($null -eq $item) { continue }
-            Add-Resource -Arn ('arn:aws:ec2:{0}:{1}:{2}/{3}' -f $SweepRegion, $script:AccountId, $collector.Type, $item.($collector.Id)) `
-                         -ManagedBy (Get-TagValueFromPairs -Pairs $item.Tags) `
-                         -Source "ec2:$($collector.Arguments[1])" -Service 'ec2' `
-                         -Type $collector.Type -ResourceRegion $SweepRegion
-            $count++
-        }
-    }
-
-    # Instances are nested one level deeper than the rest.
+    # Instances come first: which ones an autoscaling group launched decides both
+    # their own bucket and that of the volumes attached to them.
+    $asgInstanceIds = New-Object System.Collections.Generic.HashSet[string]
+    $instances = New-Object System.Collections.ArrayList
     $reservations = (Invoke-AwsCli -Arguments @('ec2', 'describe-instances', '--region', $SweepRegion)).Reservations
     foreach ($reservation in @($reservations)) {
         foreach ($instance in @($reservation.Instances)) {
             if ($null -eq $instance) { continue }
-            Add-Resource -Arn ('arn:aws:ec2:{0}:{1}:instance/{2}' -f $SweepRegion, $script:AccountId, $instance.InstanceId) `
-                         -ManagedBy (Get-TagValueFromPairs -Pairs $instance.Tags) `
-                         -Source 'ec2:describe-instances' -Service 'ec2' `
-                         -Type 'instance' -ResourceRegion $SweepRegion
+            $null = $instances.Add($instance)
+            if (Get-TagValueFromPairs -Pairs $instance.Tags -Name 'aws:autoscaling:groupName') {
+                $null = $asgInstanceIds.Add($instance.InstanceId)
+            }
+        }
+    }
+
+    # A volume attached to an autoscaling-group instance was created from the
+    # launch template alongside it, so it inherits that instance's reasoning.
+    $asgVolumeIds = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($instance in $instances) {
+        if (-not $asgInstanceIds.Contains($instance.InstanceId)) { continue }
+        foreach ($mapping in @($instance.BlockDeviceMappings)) {
+            if ($mapping.Ebs.VolumeId) { $null = $asgVolumeIds.Add($mapping.Ebs.VolumeId) }
+        }
+    }
+
+    # Rules belonging to a VPC's default security group are held inline by
+    # aws_default_security_group rather than being resources of their own.
+    $defaultSecurityGroupIds = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($group in @((Invoke-AwsCli -Arguments @('ec2', 'describe-security-groups', '--region', $SweepRegion)).SecurityGroups)) {
+        if ($group.GroupName -eq 'default') { $null = $defaultSecurityGroupIds.Add($group.GroupId) }
+    }
+
+    foreach ($collector in $collectors) {
+        $response = Invoke-AwsCli -Arguments ($collector.Arguments + @('--region', $SweepRegion))
+        foreach ($item in @($response.($collector.Property))) {
+            if ($null -eq $item) { continue }
+            $unmanageable = $false
+            $note = ''
+
+            switch ($collector.Type) {
+                'volume' {
+                    if ($asgVolumeIds.Contains($item.VolumeId)) {
+                        $unmanageable = $true
+                        $note = 'Volume created by an autoscaling group launch template'
+                    }
+                }
+                'security-group-rule' {
+                    if ($defaultSecurityGroupIds.Contains($item.GroupId)) {
+                        $unmanageable = $true
+                        $note = 'Rule held inline by aws_default_security_group'
+                    }
+                }
+                'elastic-ip' {
+                    # ServiceManaged means an AWS service allocated and owns the
+                    # address; for an ALB it is not an aws_eip at all.
+                    if ($item.ServiceManaged) {
+                        $unmanageable = $true
+                        $note = "Elastic IP owned by AWS ($($item.ServiceManaged))"
+                    }
+                }
+            }
+
+            $arn = 'arn:aws:ec2:{0}:{1}:{2}/{3}' -f $SweepRegion, $script:AccountId, $collector.Type, $item.($collector.Id)
+            if ($unmanageable) {
+                Add-Resource -Arn $arn -Source "ec2:$($collector.Arguments[1])" -Service 'ec2' `
+                             -Type $collector.Type -ResourceRegion $SweepRegion `
+                             -Unmanageable -Note $note
+            }
+            else {
+                Add-Resource -Arn $arn -ManagedBy (Get-TagValueFromPairs -Pairs $item.Tags) `
+                             -Source "ec2:$($collector.Arguments[1])" -Service 'ec2' `
+                             -Type $collector.Type -ResourceRegion $SweepRegion
+            }
             $count++
         }
+    }
+
+    foreach ($instance in $instances) {
+        $arn = 'arn:aws:ec2:{0}:{1}:instance/{2}' -f $SweepRegion, $script:AccountId, $instance.InstanceId
+        if ($asgInstanceIds.Contains($instance.InstanceId)) {
+            # The autoscaling group creates and replaces these. Importing one would
+            # make Terraform fight the group and hold state that goes stale on the
+            # next replacement, so it is deliberately never managed.
+            Add-Resource -Arn $arn -Source 'ec2:describe-instances' -Service 'ec2' `
+                         -Type 'instance' -ResourceRegion $SweepRegion `
+                         -Unmanageable -Note 'Instance launched by an autoscaling group'
+        }
+        else {
+            Add-Resource -Arn $arn -ManagedBy (Get-TagValueFromPairs -Pairs $instance.Tags) `
+                         -Source 'ec2:describe-instances' -Service 'ec2' `
+                         -Type 'instance' -ResourceRegion $SweepRegion
+        }
+        $count++
     }
 
     return $count
@@ -463,9 +533,14 @@ function Add-AutoScalingResources {
     $groups = (Invoke-AwsCli -Arguments @('autoscaling', 'describe-auto-scaling-groups', '--region', $SweepRegion)).AutoScalingGroups
     foreach ($group in @($groups)) {
         if ($null -eq $group) { continue }
-        Add-Resource -Arn $group.AutoScalingGroupARN -ManagedBy (Get-TagValueFromPairs -Pairs $group.Tags) `
+        # An autoscaling group's tags are a separate schema carrying
+        # propagate_at_launch, and the AWS provider does not merge default_tags
+        # into it. So an ASG in Terraform state still reads as untagged, and no
+        # apply will ever change that.
+        Add-Resource -Arn $group.AutoScalingGroupARN `
                      -Source 'autoscaling:describe-auto-scaling-groups' -Service 'autoscaling' `
-                     -Type 'autoScalingGroup' -ResourceRegion $SweepRegion
+                     -Type 'autoScalingGroup' -ResourceRegion $SweepRegion `
+                     -Unmanageable -Note 'Autoscaling group - default_tags does not apply'
         $count++
     }
     return $count
@@ -570,6 +645,18 @@ function Add-CloudWatchResources {
         # The ARN from describe-log-groups carries a trailing ":*" that
         # list-tags-for-resource rejects.
         $arn = $logGroup.arn -replace ':\*$', ''
+
+        # Lambda creates /aws/lambda/<function> on first invocation, outside
+        # Terraform and before any aws_cloudwatch_log_group could exist. Declaring
+        # one after the fact collides with the group already there.
+        if ($logGroup.logGroupName -like '/aws/lambda/*') {
+            Add-Resource -Arn $arn -Source 'logs:describe-log-groups' `
+                         -Service 'logs' -Type 'log-group' -ResourceRegion $SweepRegion `
+                         -Unmanageable -Note 'Log group created by Lambda'
+            $count++
+            continue
+        }
+
         $managedBy = Get-ManagedByFromCall -AsMap -TagsPath 'tags' -Tolerant -Arguments @(
             'logs', 'list-tags-for-resource', '--resource-arn', $arn, '--region', $SweepRegion)
         Add-Resource -Arn $arn -ManagedBy $managedBy -Source 'logs:describe-log-groups' `
@@ -614,6 +701,17 @@ function Add-MessagingResources {
 
     foreach ($rule in @((Invoke-AwsCli -Arguments @('events', 'list-rules', '--region', $SweepRegion)).Rules)) {
         if ($null -eq $rule) { continue }
+
+        # A rule with its own ManagedBy field was created by an AWS service and is
+        # deleted by it too - ecs.amazonaws.com does this for capacity providers.
+        if ($rule.ManagedBy) {
+            Add-Resource -Arn $rule.Arn -Source 'events:list-rules' `
+                         -Service 'events' -Type 'rule' -ResourceRegion $SweepRegion `
+                         -Unmanageable -Note "EventBridge rule owned by $($rule.ManagedBy)"
+            $count++
+            continue
+        }
+
         $managedBy = Get-ManagedByFromCall -Arguments @(
             'events', 'list-tags-for-resource', '--resource-arn', $rule.Arn, '--region', $SweepRegion)
         Add-Resource -Arn $rule.Arn -ManagedBy $managedBy -Source 'events:list-rules' `
@@ -676,7 +774,7 @@ function Add-EcsResources {
         if ($provider.name -in @('FARGATE', 'FARGATE_SPOT')) {
             Add-Resource -Arn $provider.capacityProviderArn -Source 'ecs:describe-capacity-providers' `
                          -Service 'ecs' -Type 'capacity-provider' -ResourceRegion $SweepRegion `
-                         -Untaggable -Note 'AWS-owned ECS capacity provider'
+                         -Unmanageable -Note 'AWS-owned ECS capacity provider'
             $count++
             continue
         }
@@ -712,6 +810,7 @@ function Add-LoadBalancingResources {
 
     $arns = New-Object System.Collections.ArrayList
     $lookup = @{}
+    $defaultRuleArns = New-Object System.Collections.Generic.HashSet[string]
 
     foreach ($loadBalancer in @((Invoke-AwsCli -Arguments @('elbv2', 'describe-load-balancers', '--region', $SweepRegion)).LoadBalancers)) {
         if ($null -eq $loadBalancer) { continue }
@@ -733,6 +832,9 @@ function Add-LoadBalancingResources {
                 if ($null -eq $rule) { continue }
                 $null = $arns.Add($rule.RuleArn)
                 $lookup[$rule.RuleArn] = 'listener-rule'
+                # A listener's default rule is its default_action, not an
+                # aws_lb_listener_rule, so nothing can tag it independently.
+                if ($rule.IsDefault) { $null = $defaultRuleArns.Add($rule.RuleArn) }
             }
         }
     }
@@ -747,9 +849,17 @@ function Add-LoadBalancingResources {
         $descriptions = (Invoke-AwsCli -Arguments (@('elbv2', 'describe-tags', '--region', $SweepRegion, '--resource-arns') + $chunk)).TagDescriptions
         foreach ($description in @($descriptions)) {
             if ($null -eq $description) { continue }
-            Add-Resource -Arn $description.ResourceArn -ManagedBy (Get-TagValueFromPairs -Pairs $description.Tags) `
-                         -Source 'elbv2:describe-tags' -Service 'elasticloadbalancing' `
-                         -Type $lookup[$description.ResourceArn] -ResourceRegion $SweepRegion
+            if ($defaultRuleArns.Contains($description.ResourceArn)) {
+                Add-Resource -Arn $description.ResourceArn -Source 'elbv2:describe-tags' `
+                             -Service 'elasticloadbalancing' -Type $lookup[$description.ResourceArn] `
+                             -ResourceRegion $SweepRegion `
+                             -Unmanageable -Note "Listener default rule - part of the listener's default_action"
+            }
+            else {
+                Add-Resource -Arn $description.ResourceArn -ManagedBy (Get-TagValueFromPairs -Pairs $description.Tags) `
+                             -Source 'elbv2:describe-tags' -Service 'elasticloadbalancing' `
+                             -Type $lookup[$description.ResourceArn] -ResourceRegion $SweepRegion
+            }
             $count++
         }
     }
@@ -774,6 +884,18 @@ function Add-RdsResources {
         foreach ($item in @($response.($collector.Property))) {
             if ($null -eq $item) { continue }
             $arn = $item.($collector.Arn)
+
+            # AWS reserves the default.* name and creates these itself, one per
+            # engine family, the first time something needs one. They cannot be
+            # modified or deleted, so Terraform can never own one.
+            if ($collector.Type -eq 'pg' -and $item.DBParameterGroupName -like 'default.*') {
+                Add-Resource -Arn $arn -Source "rds:$($collector.Arguments[1])" `
+                             -Service 'rds' -Type $collector.Type -ResourceRegion $SweepRegion `
+                             -Unmanageable -Note 'AWS default RDS parameter group'
+                $count++
+                continue
+            }
+
             $managedBy = Get-TagValueFromPairs -Pairs $item.TagList
             if ($null -eq $managedBy) {
                 $managedBy = Get-ManagedByFromCall -TagsPath 'TagList' -Tolerant -Arguments @(
@@ -816,7 +938,7 @@ function Add-KmsResources {
         # otherwise be permanent false positives in the same way IAM groups are.
         if ($metadata.KeyManager -ne 'CUSTOMER') {
             Add-Resource -Arn $metadata.Arn -Source 'kms:list-keys' -Service 'kms' `
-                         -Type 'key' -ResourceRegion $SweepRegion -Untaggable `
+                         -Type 'key' -ResourceRegion $SweepRegion -Unmanageable `
                          -Note 'AWS-managed KMS key - not taggable by the account'
             $count++
             continue
@@ -912,18 +1034,18 @@ function Write-Section {
 
 function Write-CoverageReport {
     $all        = @($script:Resources)
-    $untaggable = @($all | Where-Object { $_.Bucket -eq 'untaggable' })
+    $unmanageable = @($all | Where-Object { $_.Bucket -eq 'unmanageable' })
     $exempt     = @($all | Where-Object { $_.Bucket -eq $script:ExemptValue })
     # Exempt resources are deliberately outside Terraform, so counting them as
     # unmanaged would make them permanent false positives - the same argument that
-    # keeps untaggable out of the ratio. Both are excluded from it here.
-    $taggable   = @($all | Where-Object { $_.Bucket -ne 'untaggable' -and $_.Bucket -ne $script:ExemptValue })
-    $incubator  = @($taggable | Where-Object { $_.Bucket -eq $script:IncubatorValue })
-    $security   = @($taggable | Where-Object { $_.Bucket -eq $script:DevOpsSecurityValue })
-    $unmanaged  = @($taggable | Where-Object { $_.Bucket -eq 'unmanaged' })
+    # keeps unmanageable out of the ratio. Both are excluded from it here.
+    $inScope    = @($all | Where-Object { $_.Bucket -ne 'unmanageable' -and $_.Bucket -ne $script:ExemptValue })
+    $incubator  = @($inScope | Where-Object { $_.Bucket -eq $script:IncubatorValue })
+    $security   = @($inScope | Where-Object { $_.Bucket -eq $script:DevOpsSecurityValue })
+    $unmanaged  = @($inScope | Where-Object { $_.Bucket -eq 'unmanaged' })
 
     Write-Section 'Coverage summary'
-    $total   = $taggable.Count
+    $total   = $inScope.Count
     $managed = $incubator.Count + $security.Count
     $percent = 0
     if ($total -gt 0) { $percent = [math]::Round(100 * $managed / $total, 1) }
@@ -936,7 +1058,7 @@ function Write-CoverageReport {
     ) | Format-Table -AutoSize | Out-String | Write-Host
 
     Write-Host ("  {0} of {1} in-scope resources carry a managed-by tag ({2}%)." -f $managed, $total, $percent)
-    Write-Host ("  {0} further resources cannot be tagged at all and are excluded from that ratio." -f $untaggable.Count)
+    Write-Host ("  {0} further resources cannot carry the tag at all and are excluded from that ratio." -f $unmanageable.Count)
     Write-Host ("  {0} are tagged managed-by=exempt and are excluded from it as well." -f $exempt.Count)
 
     # A managed-by value that is neither repo's means something stamped a
@@ -961,10 +1083,10 @@ function Write-CoverageReport {
     if ($exempt.Count -eq 0) { Write-Host '  none' }
     else { $exempt | Sort-Object Service, Type, Arn | ForEach-Object { Write-Host "  $($_.Arn)" } }
 
-    Write-Section 'Untaggable (reported separately, not counted as unmanaged)'
-    if ($untaggable.Count -eq 0) { Write-Host '  none' }
+    Write-Section 'Unmanageable (reported separately, not counted as unmanaged)'
+    if ($unmanageable.Count -eq 0) { Write-Host '  none' }
     else {
-        $untaggable | Group-Object Note | Sort-Object Count -Descending |
+        $unmanageable | Group-Object Note | Sort-Object Count -Descending |
             Select-Object @{ n = 'Reason'; e = { $_.Name } }, Count |
             Format-Table -AutoSize | Out-String | Write-Host
     }
@@ -974,9 +1096,9 @@ function Write-CoverageReport {
         if ($unmanaged.Count -eq 0) { Write-Host '  none' }
         else { $unmanaged | Sort-Object Service, Type, Arn | ForEach-Object { Write-Host "  $($_.Arn)" } }
 
-        Write-Section 'Untaggable ARNs'
-        if ($untaggable.Count -eq 0) { Write-Host '  none' }
-        else { $untaggable | Sort-Object Service, Type, Arn | ForEach-Object { Write-Host "  $($_.Arn)" } }
+        Write-Section 'Unmanageable ARNs'
+        if ($unmanageable.Count -eq 0) { Write-Host '  none' }
+        else { $unmanageable | Sort-Object Service, Type, Arn | ForEach-Object { Write-Host "  $($_.Arn)" } }
     }
 
     Write-Section 'Blind spots - this report is not a complete inventory'
