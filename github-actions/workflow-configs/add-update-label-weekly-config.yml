@@ -57,16 +57,15 @@
 
 labels:
   required:
-    statusUpdated: "status: updated" # <-- confirm default label name
-    statusInactive1: "status: to update!" # <-- confirm default label name
-    statusInactive2: "status: 2 weeks inactive" # <-- confirm default label name
-    statusHelpWanted: "status: help wanted" # <-- confirm default label name
+    statusUpdated: "status: updated"
+    statusInactive1: "status: to update!"
+    statusInactive2: "status: 2 weeks inactive"
+    statusHelpWanted: "status: help wanted"
 
   filtering:
-    - "draft" # <-- confirm default label name
-    - "er" # <-- confirm default label name
-    - "epic" # <-- confirm default label name
-    - "dependency" # <-- confirm default label name
+    - "draft"
+    - "epic"
+    - "dependency"
     # - "" # <-- Uncomment and add label name if needed.
     # - "" # <-- Uncomment and add label name if needed.
 
@@ -145,9 +144,9 @@ timeframes:
 # confirmed the values, **delete the comment**.
 
 projectBoard:
-  targetStatus: "In progress (actively working)" # <-- confirm default value
-  questionsStatus: "Questions / In Review" # <-- confirm default value
-  # projectNumber: 123 # <-- uncomment and set to your board's number
+  targetStatus: "In progress (actively working)"
+  questionsStatus: "Questions/Review"
+  projectNumber: 73
 
 
 
