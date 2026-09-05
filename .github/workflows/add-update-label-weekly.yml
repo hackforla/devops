@@ -1,19 +1,45 @@
-name: Schedule Sunday 0700
+name: Add Update Label Weekly - ATO
+
+# Associated configuration files for this workflow:
+#   `github-actions/workflow-configs/add-update-label-weekly-config.yml`
+#   `github-actions/workflow-configs/templates/add-update-instructions-template.md`
+# Customization notes:
+#   Runs Wed 2200 UTC, exc. July and December.
+#   2200 UTC is 3:00 PM Pacific during daylight saving (PDT) and 2:00 PM Pacific outside it (PST):
+#   GitHub cron is always UTC and does not follow DST, so the local time shifts by an hour on
+#   1 Nov 2026 and back on 8 Mar 2027. Change to '0 23' if 3:00 PM PST matters more than 3:00 PM PDT.
+#    ⮡ You can compose a schedule here: https://crontab.cronhub.io/
 
 on:
   schedule:
-    - cron:  '0 7 * * 0'
+    - cron: '0 22 * 1-6,8-11 3'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Run in dry-run mode to preview changes: will not update labels or comments.'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
 
 jobs:
-  Add-Update-Label-to-Issues-Weekly:
+  Add-Update-Label-Weekly:
     runs-on: ubuntu-latest
+    if: github.repository == 'hackforla/devops'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/github-script@v7
-        env:
-          IN_PROGRESS_COLUMN_ID: ${{ secrets.IN_PROGRESS_COLUMN_ID }}
+      - name: Generate token from GitHub App
+        id: generate-app-token
+        uses: actions/create-github-app-token@v3
         with:
-          script: |
-            const { IN_PROGRESS_COLUMN_ID } = process.env;
-            const script = require('./github-actions/trigger-schedule/add-update-label-weekly/add-label.js');
-            script({ g: github, c: context }, IN_PROGRESS_COLUMN_ID);
+          app-id: ${{ secrets.HFLA_GRAPHQL_APP_ID }}
+          private-key: ${{ secrets.HFLA_GRAPHQL_APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Run workflow
+        uses: hackforla/automate-the-org/gha-add-update-label-weekly@v1
+        with:
+          github-token: ${{ steps.generate-app-token.outputs.token }}
+          dry-run: ${{ github.event_name == 'schedule' && 'false' || github.event.inputs.dry-run || 'true' }}
