@@ -1,5 +1,5 @@
 ---
-name: Onboard Ops CoP Lead
+name: Onboard DevOps CoP Lead
 about: Use this checklist for onboarding Leads
 title: Onboard [name of new lead]
 labels: 'role: CoP lead'
@@ -14,7 +14,7 @@ We need to onboard [NEW LEAD NAME] onto the project.
 - [ ] Slack channel membership
   - [ ] #devops
 - [ ] Add to Google Calendar invites
-  - [ ] Ops meeting
+  - [ ] DevOps meeting
   - [ ] Monthly CoP leads meeting
 - [ ] Figma
   - [ ] invite

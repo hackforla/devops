@@ -1,5 +1,5 @@
 ---
-name: Offboard Ops CoP Lead
+name: Offboard DevOps CoP Lead
 about: Use this checklist for offboarding Leads
 title: Offboard [name of new lead]
 labels: 'role: CoP lead'
@@ -8,7 +8,7 @@ assignees: ''
 ---
 
 ### Overview
-We need to remove [NEW LEAD NAME] from the Ops CoP leads team.
+We need to remove [NEW LEAD NAME] from the DevOps CoP leads team.
 
 ### Offboard Checklist
 
