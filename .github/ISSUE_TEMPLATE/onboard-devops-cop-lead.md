@@ -12,7 +12,7 @@ We need to onboard [NEW LEAD NAME] onto the project.
 
 ### Onboard Checklist
 - [ ] Slack channel membership
-  - [ ] #devops
+  - [ ] #ops
 - [ ] Add to Google Calendar invites
   - [ ] DevOps meeting
   - [ ] Monthly CoP leads meeting
