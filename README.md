@@ -12,7 +12,7 @@ please Visit the below links for more info:
 
 ## When We Meet
 
-Wednesday nights 6:00PM Pacific Time
+See [CoP Meetings](https://github.com/hackforla/devops/wiki/CoP-Meetings) on the wiki for the meeting time and which weeks we skip.
 
 
 ## Get Started
@@ -35,7 +35,7 @@ If you have not attended Hack for LA onboarding, plase read the [Guide for New V
 
 ### Step 3. Join the CoP Meeting - Come Meet devs from All Teams
 
-* Join our DevOps Community of Practice meeting Wednesdays at 6 PM PST
+* Join our DevOps Community of Practice meeting — see [CoP Meetings](https://github.com/hackforla/devops/wiki/CoP-Meetings) for the time and which weeks we skip
 * Take the [Remote Onboarding Survey](https://docs.google.com/forms/d/e/1FAIpQLScXnJSyCXgO_RCAuCyOkG4sqGILpAepTlJ0HOaK4H_ccEVmNw/viewform) to provide feedback about your experience joining Hack for LA.
 
 The DevOps Community of Practice is one of many.  [See all our Communities of Practices](https://github.com/hackforla/communities-of-practice/blob/main/README.md)
