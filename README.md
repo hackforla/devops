@@ -23,7 +23,7 @@ If you have not attended Hack for LA onboarding, plase read the [Guide for New V
 ### Step 1. Join DevOps Community of Practice
 
 1. Join the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel and introduce yourself.
-2. Slack a [DevOps Community of Practice lead](https://github.com/hackforla/devops/wiki/Community#ops-community-of-practice-cop-leads) with your Gmail address.
+2. Slack a [DevOps Community of Practice lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) with your Gmail address.
 3. Accept your Google Drive invite to access the google calendar and the [shared folder]([https://drive.google.com/drive/u/0/folders/1xWllQli2wUSsRF9OaSQBBQ1vaY7kRkAT](https://drive.google.com/drive/folders/1XBuLSjOEKGfeVvWluIDyPYXTKHXhYHDM?usp=sharing)).
 
 ### Step 2. Familiarize with Our Processes
