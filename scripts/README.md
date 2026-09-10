@@ -43,6 +43,7 @@ This is a **tag sweep, not a Terraform state diff**. Read
 ./aws-terraform-coverage.ps1 -AwsProfile hfla-incubator   # pick a named profile
 ./aws-terraform-coverage.ps1 -CsvPath coverage.csv        # full classified list as CSV
 ./aws-terraform-coverage.ps1 -Region us-west-2            # narrow the sweep
+./aws-terraform-coverage.ps1 -ProjectTag                  # audit the project tag instead
 ```
 
 A full run makes several hundred read-only API calls and takes a few minutes.
@@ -102,6 +103,81 @@ under-reports.
 - **Tagged with an unrecognised `managed-by` value** — appears only when
   something stamped a provenance tag that is neither repo's and is not `exempt`.
   Worth investigating when it shows up.
+
+### Auditing the `project` tag instead (`-ProjectTag`)
+
+`-ProjectTag` runs a **different sweep against a different tag**, and answers a
+different question:
+
+| | Default run | `-ProjectTag` |
+|---|---|---|
+| Tag read | `managed-by` | `project` |
+| Scope | ~30 resource types, the whole account | the 8 resource types the tag standard names |
+| Question | does anything manage this? | which project owns this? |
+| A gap means | a hygiene problem | **an outage** |
+
+```powershell
+./aws-terraform-coverage.ps1 -ProjectTag             # summary and every nonconforming value
+./aws-terraform-coverage.ps1 -ProjectTag -ListArns   # plus every ARN missing the tag
+./aws-terraform-coverage.ps1 -ProjectTag -CsvPath project-tags.csv
+```
+
+The standard is
+[DR-Machine-to-machine-IAM-scoping](https://github.com/hackforla/devops/wiki/DR-Machine-to-machine-IAM-scoping)
+on the devops wiki. It defines the tag value as the Hack for LA **project** name
+— `vrms`, `home-unite-us`, `people-depot`, `civic-tech-jobs`, `civictechindex` —
+never an application, environment or repository name, plus `shared` for
+infrastructure belonging to no single project.
+
+**Why this matters more than the `managed-by` report.** The machine roles in
+[hackforla/incubator#206](https://github.com/hackforla/incubator/issues/206) are
+granted access on the basis of this tag matching, and **tag-based access control
+fails closed**. A resource whose tag is missing or wrong is not over-shared; it
+becomes unreachable. Run this and read it immediately before any policy change
+that conditions on the tag.
+
+Four outcomes per resource:
+
+- **`conforming`** — carries a value the standard recognises.
+- **`shared`** — carries `shared`, i.e. deliberately belongs to no one project.
+- **`nonconforming`** — carries a value that is *not* in the standard. **This is
+  the dangerous bucket, not `missing`.** Such a resource looks correctly tagged
+  in the console and still fails to match a policy, so it is always listed in
+  full rather than summarised.
+- **`missing`** — carries no `project` tag at all.
+
+Two things the report deliberately does *not* treat as equivalent:
+
+- **On the three machine IAM role families the tag is inventory only.** Policies
+  name the project literally, interpolated by Terraform, rather than
+  self-referencing `${aws:PrincipalTag/project}`, so a missing tag on a *role*
+  degrades reporting and cost allocation but breaks no access. A missing tag on
+  a *resource* does break access.
+- **A gap is not always fixable in a module.** Several untagged resources are
+  not in Terraform at all, so tagging them means a hand-applied change or
+  waiting on their import ticket. Check which before proposing where the fix
+  goes.
+
+The role families are matched by name, because nothing else distinguishes them.
+Note the naming is inverted: `incubator-prod-ecs-task-role` is the shared
+**execution** role, while the per-container **task** roles are the
+`ecs-container-*` ones.
+
+#### A trap worth knowing before you re-check a result by hand
+
+`aws ssm list-tags-for-resource` takes the parameter name as its resource id,
+leading slash included, and works fine. But **Git Bash rewrites any argument
+beginning with `/` into a Windows path**, so the identical command run there
+fails with `InvalidResourceId` — and a sweep that discards stderr reads that as
+an untagged parameter.
+
+That is exactly what produced the "0 of 37 SSM parameters carry a `project` tag"
+figure in
+[hackforla/incubator#197](https://github.com/hackforla/incubator/issues/197) and
+in the decision record. It was wrong: every parameter was tagged the whole time.
+This script is unaffected because it is PowerShell, but anyone spot-checking one
+of its results from Git Bash will hit it. Drop the leading slash there, or use
+PowerShell.
 
 ### Why it does not just use the Resource Groups Tagging API
 
@@ -199,3 +275,8 @@ created first. Open a follow-on issue if the report proves worth automating.
   added `managed-by = terraform-incubator`, for exactly this reporting purpose.
 - [hackforla/devops-security#172](https://github.com/hackforla/devops-security/issues/172) —
   the devops-security half of the same tagging work.
+- [hackforla/incubator#197](https://github.com/hackforla/incubator/issues/197) —
+  added `-ProjectTag`, and the audit it exists to make repeatable.
+- [hackforla/incubator#206](https://github.com/hackforla/incubator/issues/206) —
+  the epic whose policies condition on the `project` tag, and the reason a gap in
+  that tag is an outage rather than a reporting defect.

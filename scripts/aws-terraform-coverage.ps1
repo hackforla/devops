@@ -44,8 +44,16 @@
     Account this script expects to be pointed at. A mismatch warns but does not
     stop, so the script can be reused against another account deliberately.
 
+.PARAMETER ProjectTag
+    Audit the `project` tag instead of `managed-by`, over the resource types the
+    tag standard names rather than the whole account. Reports each resource as
+    conforming, shared, nonconforming or missing. Run this before any policy
+    change that conditions on the tag: those policies fail closed, so a missing
+    or wrong tag is an outage rather than an over-grant.
+
 .PARAMETER ListArns
     List every unmanaged and unmanageable ARN, not just the per-service counts.
+    Under -ProjectTag, lists every ARN missing the tag.
 
 .PARAMETER CsvPath
     Also write the full classified resource list to this path as CSV.
@@ -58,6 +66,9 @@
 
 .EXAMPLE
     ./aws-terraform-coverage.ps1 -CsvPath coverage.csv
+
+.EXAMPLE
+    ./aws-terraform-coverage.ps1 -ProjectTag -ListArns
 #>
 [CmdletBinding()]
 param(
@@ -65,7 +76,8 @@ param(
     [string]$AwsProfile,
     [string]$ExpectedAccountId = '035866691871',
     [switch]$ListArns,
-    [string]$CsvPath
+    [string]$CsvPath,
+    [switch]$ProjectTag
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,6 +87,24 @@ $script:IncubatorValue      = 'terraform-incubator'
 $script:DevOpsSecurityValue = 'terraform-devops-security'
 $script:ExemptValue         = 'exempt'
 $script:ReadOnlyVerbPattern = '^(describe|list|get)-'
+
+# -ProjectTag only. The recognised values come from the tag standard, and a
+# value outside this list is a defect rather than a new project: adding one here
+# without amending the standard defeats the point of checking against it.
+$script:ProjectTagKey      = 'project'
+$script:SharedProjectValue = 'shared'
+$script:KnownProjects      = @('vrms', 'home-unite-us', 'people-depot',
+                               'civic-tech-jobs', 'civictechindex')
+
+# The three machine role families the standard names. Matched on name because
+# nothing else distinguishes them, and the shared execution role's name is
+# actively misleading -- incubator-prod-ecs-task-role is the execution role,
+# while the per-container task roles are the ecs-container-* ones.
+$script:MachineRolePatterns = [ordered]@{
+    'incubator-cicd-*'             = 'iam-role-cicd'
+    'ecs-container-*'              = 'iam-role-ecs-task'
+    'incubator-prod-ecs-task-role' = 'iam-role-ecs-execution'
+}
 
 # ---------------------------------------------------------------------------
 # AWS CLI plumbing
@@ -1132,6 +1162,358 @@ function Write-CoverageReport {
 }
 
 # ---------------------------------------------------------------------------
+# Project tag audit (-ProjectTag)
+#
+# A separate sweep from the managed-by report above, over exactly the resource
+# types the tag standard names -- see DR-Machine-to-machine-IAM-scoping on the
+# devops wiki. It is deliberately not a second dimension bolted onto every
+# collector: the standard lists eight resource types, the managed-by sweep
+# covers roughly thirty, and reporting a project tag for a KMS key or a route
+# table would invent gaps the standard never asked for.
+#
+# The two sweeps also answer different questions. managed-by asks "does anything
+# manage this", where absence is a hygiene problem. project asks "which project
+# owns this", where absence breaks access, because the policies that condition
+# on this tag fail closed.
+# ---------------------------------------------------------------------------
+
+$script:ProjectResources = New-Object System.Collections.ArrayList
+
+function Get-ProjectTagFromCall {
+    <# As Get-ManagedByFromCall, but reads the project tag rather than managed-by. #>
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [string]$TagsPath = 'Tags',
+        [switch]$AsMap,
+        [switch]$Tolerant
+    )
+
+    if ($Tolerant) { $response = Invoke-AwsCli -Arguments $Arguments -Tolerant }
+    else           { $response = Invoke-AwsCli -Arguments $Arguments }
+    if ($null -eq $response) { return $null }
+
+    $tags = Select-Nested -InputObject $response -Path $TagsPath
+    if ($AsMap) { return Get-TagValueFromMap -Map $tags -Name $script:ProjectTagKey }
+    return Get-TagValueFromPairs -Pairs $tags -Name $script:ProjectTagKey
+}
+
+function Add-ProjectResource {
+    <#
+        Records one resource against the tag standard. Four outcomes, and the
+        interesting one is nonconforming: a resource carrying a project value
+        that is not in the standard's list is worse than an untagged one,
+        because it looks correct in a console and still denies access.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Arn,
+        [string]$Project,
+        [Parameter(Mandatory)][string]$Kind,
+        [string]$ResourceRegion = 'global',
+        [string]$Note
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Arn)) { return }
+
+    if ([string]::IsNullOrWhiteSpace($Project))       { $status = 'missing' }
+    elseif ($Project -eq $script:SharedProjectValue)  { $status = 'shared' }
+    elseif ($script:KnownProjects -contains $Project) { $status = 'conforming' }
+    else                                              { $status = 'nonconforming' }
+
+    $null = $script:ProjectResources.Add([pscustomobject]@{
+        Arn     = $Arn
+        Kind    = $Kind
+        Region  = $ResourceRegion
+        Project = $Project
+        Status  = $status
+        Note    = $Note
+    })
+}
+
+function Add-ProjectEcrResources {
+    param([string]$SweepRegion)
+    $count = 0
+    foreach ($repository in @((Invoke-AwsCli -Arguments @('ecr', 'describe-repositories', '--region', $SweepRegion)).repositories)) {
+        if ($null -eq $repository) { continue }
+        $project = Get-ProjectTagFromCall -TagsPath 'tags' -Arguments @(
+            'ecr', 'list-tags-for-resource', '--resource-arn', $repository.repositoryArn, '--region', $SweepRegion)
+        Add-ProjectResource -Arn $repository.repositoryArn -Project $project `
+                            -Kind 'ecr-repository' -ResourceRegion $SweepRegion
+        $count++
+    }
+    return $count
+}
+
+function Add-ProjectEcsResources {
+    param([string]$SweepRegion)
+    $count = 0
+
+    foreach ($clusterArn in @((Invoke-AwsCli -Arguments @('ecs', 'list-clusters', '--region', $SweepRegion)).clusterArns)) {
+        if ([string]::IsNullOrWhiteSpace($clusterArn)) { continue }
+        $serviceArns = @((Invoke-AwsCli -Arguments @('ecs', 'list-services', '--cluster', $clusterArn,
+                                                     '--region', $SweepRegion)).serviceArns)
+        # describe-services accepts at most 10 services per call.
+        foreach ($chunk in (Split-IntoChunks -Items $serviceArns -Size 10)) {
+            $described = (Invoke-AwsCli -Arguments (@('ecs', 'describe-services', '--cluster', $clusterArn,
+                                                      '--include', 'TAGS', '--region', $SweepRegion, '--services') + $chunk)).services
+            foreach ($service in @($described)) {
+                if ($null -eq $service) { continue }
+                Add-ProjectResource -Arn $service.serviceArn `
+                                    -Project (Get-TagValueFromPairs -Pairs $service.tags -Name $script:ProjectTagKey) `
+                                    -Kind 'ecs-service' -ResourceRegion $SweepRegion
+                $count++
+            }
+        }
+    }
+
+    # Current revision per family only, matching the managed-by sweep: older
+    # revisions are immutable deploy artifacts and cannot be retagged usefully.
+    foreach ($family in @((Invoke-AwsCli -Arguments @('ecs', 'list-task-definition-families',
+                                                      '--status', 'ACTIVE', '--region', $SweepRegion)).families)) {
+        if ([string]::IsNullOrWhiteSpace($family)) { continue }
+        $described = Invoke-AwsCli -Tolerant -Arguments @('ecs', 'describe-task-definition',
+                                                          '--task-definition', $family,
+                                                          '--include', 'TAGS', '--region', $SweepRegion)
+        if ($null -eq $described) { continue }
+        Add-ProjectResource -Arn $described.taskDefinition.taskDefinitionArn `
+                            -Project (Get-TagValueFromPairs -Pairs $described.tags -Name $script:ProjectTagKey) `
+                            -Kind 'ecs-task-definition' -ResourceRegion $SweepRegion
+        $count++
+    }
+
+    return $count
+}
+
+function Add-ProjectSsmResources {
+    param([string]$SweepRegion)
+    $count = 0
+    foreach ($parameter in @((Invoke-AwsCli -Arguments @('ssm', 'describe-parameters', '--region', $SweepRegion)).Parameters)) {
+        if ($null -eq $parameter) { continue }
+        # list-tags-for-resource takes the parameter name as the resource id and
+        # accepts the leading slash. Note for anyone re-checking a result by hand
+        # from Git Bash rather than from PowerShell: that shell rewrites any
+        # argument beginning with "/" into a Windows path, so the same call there
+        # fails with InvalidResourceId and reads as an untagged parameter. That is
+        # what produced the "0 of 37 parameters are tagged" figure in
+        # hackforla/incubator#197, which was wrong -- all of them are tagged.
+        $project = Get-ProjectTagFromCall -TagsPath 'TagList' -Tolerant -Arguments @(
+            'ssm', 'list-tags-for-resource', '--resource-type', 'Parameter',
+            '--resource-id', $parameter.Name, '--region', $SweepRegion)
+        $arn = 'arn:aws:ssm:{0}:{1}:parameter{2}' -f $SweepRegion, $script:AccountId, ($parameter.Name -replace '^/?', '/')
+        Add-ProjectResource -Arn $arn -Project $project -Kind 'ssm-parameter' -ResourceRegion $SweepRegion
+        $count++
+    }
+    return $count
+}
+
+function Add-ProjectLogGroupResources {
+    param([string]$SweepRegion)
+    $count = 0
+    foreach ($logGroup in @((Invoke-AwsCli -Arguments @('logs', 'describe-log-groups', '--region', $SweepRegion)).logGroups)) {
+        if ($null -eq $logGroup) { continue }
+        # describe-log-groups returns a trailing ":*" that list-tags-for-resource rejects.
+        $arn = $logGroup.arn -replace ':\*$', ''
+        $project = Get-ProjectTagFromCall -AsMap -TagsPath 'tags' -Tolerant -Arguments @(
+            'logs', 'list-tags-for-resource', '--resource-arn', $arn, '--region', $SweepRegion)
+        $note = $null
+        if ($logGroup.logGroupName -like '/aws/lambda/*') {
+            $note = 'Created by Lambda on first invocation, outside Terraform'
+        }
+        Add-ProjectResource -Arn $arn -Project $project -Kind 'log-group' `
+                            -ResourceRegion $SweepRegion -Note $note
+        $count++
+    }
+    return $count
+}
+
+function Add-ProjectCognitoResources {
+    param([string]$SweepRegion)
+    $count = 0
+    $pools = (Invoke-AwsCli -Arguments @('cognito-idp', 'list-user-pools', '--max-results', '60', '--region', $SweepRegion)).UserPools
+    foreach ($pool in @($pools)) {
+        if ($null -eq $pool) { continue }
+        $arn = 'arn:aws:cognito-idp:{0}:{1}:userpool/{2}' -f $SweepRegion, $script:AccountId, $pool.Id
+        # Cognito returns tags as a dictionary, not as Key/Value pairs.
+        $project = Get-ProjectTagFromCall -AsMap -Arguments @(
+            'cognito-idp', 'list-tags-for-resource', '--resource-arn', $arn, '--region', $SweepRegion)
+        Add-ProjectResource -Arn $arn -Project $project -Kind 'cognito-user-pool' `
+                            -ResourceRegion $SweepRegion -Note $pool.Name
+        $count++
+    }
+    return $count
+}
+
+function Add-ProjectS3Resources {
+    Write-Step 'S3 buckets'
+    $count = 0
+    foreach ($bucket in @((Invoke-AwsCli -Arguments @('s3api', 'list-buckets')).Buckets)) {
+        if ($null -eq $bucket) { continue }
+        # A bucket with no tag set at all makes this call fail, which means the
+        # same thing here as an empty tag set.
+        $project = Get-ProjectTagFromCall -Tolerant -TagsPath 'TagSet' `
+                                          -Arguments @('s3api', 'get-bucket-tagging', '--bucket', $bucket.Name)
+        Add-ProjectResource -Arn "arn:aws:s3:::$($bucket.Name)" -Project $project -Kind 's3-bucket'
+        $count++
+    }
+    Write-Host $count
+    return $count
+}
+
+function Add-ProjectIamRoleResources {
+    <#
+        Only the three machine role families the standard names, not every role
+        in the account. Per the standard this tag is inventory rather than
+        authorization for these, so a gap here is a hygiene defect and not an
+        outage -- the report says so rather than leaving the reader to guess.
+    #>
+    Write-Step 'machine IAM roles'
+    $count = 0
+    foreach ($role in @((Invoke-AwsCli -Arguments @('iam', 'list-roles')).Roles)) {
+        if ($null -eq $role) { continue }
+        if ($role.Path -like '/aws-service-role/*' -or $role.Path -like '/aws-reserved/*') { continue }
+
+        $kind = $null
+        foreach ($pattern in $script:MachineRolePatterns.Keys) {
+            if ($role.RoleName -like $pattern) { $kind = $script:MachineRolePatterns[$pattern]; break }
+        }
+        if (-not $kind) { continue }
+
+        $project = Get-ProjectTagFromCall -Arguments @('iam', 'list-role-tags', '--role-name', $role.RoleName)
+        Add-ProjectResource -Arn $role.Arn -Project $project -Kind $kind -Note 'inventory only, not authorization'
+        $count++
+    }
+    Write-Host $count
+    return $count
+}
+
+function Write-ProjectTagReport {
+    $all = @($script:ProjectResources)
+
+    $conforming    = @($all | Where-Object { $_.Status -eq 'conforming' })
+    $shared        = @($all | Where-Object { $_.Status -eq 'shared' })
+    $nonconforming = @($all | Where-Object { $_.Status -eq 'nonconforming' })
+    $missing       = @($all | Where-Object { $_.Status -eq 'missing' })
+
+    Write-Section 'Project tag summary'
+    $classified = $conforming.Count + $shared.Count
+    $percent = 0
+    if ($all.Count -gt 0) { $percent = [math]::Round(100 * $classified / $all.Count, 1) }
+
+    @(
+        [pscustomobject]@{ Status = 'conforming';    Resources = $conforming.Count }
+        [pscustomobject]@{ Status = 'shared';        Resources = $shared.Count }
+        [pscustomobject]@{ Status = 'nonconforming'; Resources = $nonconforming.Count }
+        [pscustomobject]@{ Status = 'missing';       Resources = $missing.Count }
+    ) | Format-Table -AutoSize | Out-String | Write-Host
+
+    Write-Host ("  {0} of {1} resources carry a project value the standard recognises ({2}%)." -f $classified, $all.Count, $percent)
+    Write-Host ("  Recognised values: {0}, plus '{1}' for resources belonging to no single project." -f
+                ($script:KnownProjects -join ', '), $script:SharedProjectValue)
+
+    Write-Section 'By resource type'
+    $all | Group-Object Kind | Sort-Object Name | ForEach-Object {
+        $rows = @($_.Group)
+        [pscustomobject]@{
+            Kind          = $_.Name
+            Total         = $rows.Count
+            Conforming    = @($rows | Where-Object { $_.Status -eq 'conforming' }).Count
+            Shared        = @($rows | Where-Object { $_.Status -eq 'shared' }).Count
+            Nonconforming = @($rows | Where-Object { $_.Status -eq 'nonconforming' }).Count
+            Missing       = @($rows | Where-Object { $_.Status -eq 'missing' }).Count
+        }
+    } | Format-Table -AutoSize | Out-String | Write-Host
+
+    # Always listed in full, however long. A wrong value denies access to a
+    # resource that looks tagged, so this is the section that predicts an outage.
+    Write-Section 'Nonconforming - project value is not in the standard'
+    if ($nonconforming.Count -eq 0) { Write-Host '  none' }
+    else {
+        $nonconforming | Group-Object Project | Sort-Object Count -Descending |
+            Select-Object @{ n = 'Value'; e = { $_.Name } }, Count |
+            Format-Table -AutoSize | Out-String | Write-Host
+        $nonconforming | Sort-Object Kind, Arn | ForEach-Object {
+            Write-Host ('  {0}  [{1}]' -f $_.Arn, $_.Project)
+        }
+    }
+
+    Write-Section 'Missing by resource type'
+    if ($missing.Count -eq 0) { Write-Host '  none' }
+    else {
+        $missing | Group-Object Kind | Sort-Object Count -Descending |
+            Select-Object @{ n = 'Kind'; e = { $_.Name } }, Count |
+            Format-Table -AutoSize | Out-String | Write-Host
+        if (-not $ListArns) { Write-Host '  Re-run with -ListArns for the individual ARNs.' }
+    }
+
+    if ($ListArns -and $missing.Count -gt 0) {
+        Write-Section 'Missing ARNs'
+        $missing | Sort-Object Kind, Arn | ForEach-Object {
+            if ($_.Note) { Write-Host ('  {0}  ({1})' -f $_.Arn, $_.Note) }
+            else         { Write-Host "  $($_.Arn)" }
+        }
+    }
+
+    Write-Section 'Reading this report'
+    $notes = @(
+        @('A missing or wrong project tag denies access rather than over-granting,',
+          'because the policies that condition on it fail closed. Run this and read',
+          'it immediately before any policy change that conditions on the tag.'),
+        @('nonconforming is the dangerous bucket, not missing. A resource tagged',
+          'with an unrecognised value looks correct in the console and still fails',
+          'to match the policy.'),
+        @('On the three machine IAM role families the tag is inventory and cost',
+          'allocation only -- policies name the project literally rather than',
+          'self-referencing the principal tag -- so a gap there is a hygiene',
+          'defect and not an outage.'),
+        @('Resources outside Terraform can only be tagged by hand, so a gap here',
+          'is not always fixable in a module. Check whether the resource is',
+          'managed before proposing where the fix goes.'),
+        @('This sweep covers the resource types the standard names and nothing',
+          'else. It is not an inventory of the account -- run without -ProjectTag',
+          'for that.')
+    )
+    foreach ($note in $notes) {
+        Write-Host "  - $($note[0])"
+        for ($index = 1; $index -lt $note.Count; $index++) { Write-Host "    $($note[$index])" }
+    }
+    Write-Host ''
+}
+
+function Invoke-ProjectTagAudit {
+    Write-Host ''
+    Write-Host 'Global resources'
+    $null = Add-ProjectS3Resources
+    $null = Add-ProjectIamRoleResources
+
+    foreach ($sweepRegion in $Region) {
+        Write-Host ''
+        Write-Host "Regional resources ($sweepRegion)"
+
+        $collectors = @(
+            @{ Label = 'ECR repositories';           Function = 'Add-ProjectEcrResources' }
+            @{ Label = 'ECS services and task defs'; Function = 'Add-ProjectEcsResources' }
+            @{ Label = 'SSM parameters';             Function = 'Add-ProjectSsmResources' }
+            @{ Label = 'CloudWatch log groups';      Function = 'Add-ProjectLogGroupResources' }
+            @{ Label = 'Cognito user pools';         Function = 'Add-ProjectCognitoResources' }
+        )
+
+        foreach ($collector in $collectors) {
+            Write-Step $collector.Label
+            $count = & $collector.Function -SweepRegion $sweepRegion
+            Write-Host $count
+        }
+    }
+
+    Write-ProjectTagReport
+
+    if ($CsvPath) {
+        $script:ProjectResources | Sort-Object Status, Kind, Arn |
+            Export-Csv -Path $CsvPath -NoTypeInformation -Encoding utf8
+        Write-Host "Full classified list written to $CsvPath"
+        Write-Host ''
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1150,6 +1532,11 @@ Write-Host "Regions : $($Region -join ', ')"
 if ($ExpectedAccountId -and $script:AccountId -ne $ExpectedAccountId) {
     Write-Warning (("Expected account {0} but the current credentials are for {1}. " +
                     'Continuing anyway.') -f $ExpectedAccountId, $script:AccountId)
+}
+
+if ($ProjectTag) {
+    Invoke-ProjectTagAudit
+    return
 }
 
 Write-Host ''
