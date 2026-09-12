@@ -47,13 +47,13 @@
 .PARAMETER ProjectTag
     Audit the `project` tag instead of `managed-by`, over the resource types the
     tag standard names rather than the whole account. Reports each resource as
-    conforming, shared, nonconforming or missing. Run this before any policy
-    change that conditions on the tag: those policies fail closed, so a missing
+    conforming, nonconforming or untagged. Run this before any policy
+    change that conditions on the tag: those policies fail closed, so an absent
     or wrong tag is an outage rather than an over-grant.
 
 .PARAMETER ListArns
     List every unmanaged and unmanageable ARN, not just the per-service counts.
-    Under -ProjectTag, lists every ARN missing the tag.
+    Under -ProjectTag, lists every untagged ARN.
 
 .PARAMETER CsvPath
     Also write the full classified resource list to this path as CSV.
@@ -91,10 +91,14 @@ $script:ReadOnlyVerbPattern = '^(describe|list|get)-'
 # -ProjectTag only. The recognised values come from the tag standard, and a
 # value outside this list is a defect rather than a new project: adding one here
 # without amending the standard defeats the point of checking against it.
-$script:ProjectTagKey      = 'project'
-$script:SharedProjectValue = 'shared'
-$script:KnownProjects      = @('vrms', 'home-unite-us', 'people-depot',
-                               'civic-tech-jobs', 'civictechindex')
+#
+# There is deliberately no 'shared' value. The standard retired it on
+# 2026-09-12: a resource belonging to no single project carries no project tag
+# at all. So 'shared' is now an unrecognised value like any other and reports as
+# nonconforming if it ever appears -- which is intended, not an oversight.
+$script:ProjectTagKey = 'project'
+$script:KnownProjects = @('vrms', 'home-unite-us', 'people-depot',
+                          'civic-tech-jobs', 'civictechindex')
 
 # The three machine role families the standard names. Matched on name because
 # nothing else distinguishes them, and the shared execution role's name is
@@ -1214,8 +1218,12 @@ function Add-ProjectResource {
 
     if ([string]::IsNullOrWhiteSpace($Arn)) { return }
 
-    if ([string]::IsNullOrWhiteSpace($Project))       { $status = 'missing' }
-    elseif ($Project -eq $script:SharedProjectValue)  { $status = 'shared' }
+    # 'untagged' is not the same as a defect. Since the standard retired the
+    # 'shared' value, an absent tag means either that the resource belongs to no
+    # single project -- which is correct -- or that nobody has classified it yet.
+    # This script cannot tell those apart; separating them is a per-resource-type
+    # judgement made by whoever reads the report.
+    if ([string]::IsNullOrWhiteSpace($Project))       { $status = 'untagged' }
     elseif ($script:KnownProjects -contains $Project) { $status = 'conforming' }
     else                                              { $status = 'nonconforming' }
 
@@ -1389,25 +1397,22 @@ function Write-ProjectTagReport {
     $all = @($script:ProjectResources)
 
     $conforming    = @($all | Where-Object { $_.Status -eq 'conforming' })
-    $shared        = @($all | Where-Object { $_.Status -eq 'shared' })
     $nonconforming = @($all | Where-Object { $_.Status -eq 'nonconforming' })
-    $missing       = @($all | Where-Object { $_.Status -eq 'missing' })
+    $untagged      = @($all | Where-Object { $_.Status -eq 'untagged' })
 
     Write-Section 'Project tag summary'
-    $classified = $conforming.Count + $shared.Count
     $percent = 0
-    if ($all.Count -gt 0) { $percent = [math]::Round(100 * $classified / $all.Count, 1) }
+    if ($all.Count -gt 0) { $percent = [math]::Round(100 * $conforming.Count / $all.Count, 1) }
 
     @(
         [pscustomobject]@{ Status = 'conforming';    Resources = $conforming.Count }
-        [pscustomobject]@{ Status = 'shared';        Resources = $shared.Count }
         [pscustomobject]@{ Status = 'nonconforming'; Resources = $nonconforming.Count }
-        [pscustomobject]@{ Status = 'missing';       Resources = $missing.Count }
+        [pscustomobject]@{ Status = 'untagged';      Resources = $untagged.Count }
     ) | Format-Table -AutoSize | Out-String | Write-Host
 
-    Write-Host ("  {0} of {1} resources carry a project value the standard recognises ({2}%)." -f $classified, $all.Count, $percent)
-    Write-Host ("  Recognised values: {0}, plus '{1}' for resources belonging to no single project." -f
-                ($script:KnownProjects -join ', '), $script:SharedProjectValue)
+    Write-Host ("  {0} of {1} resources carry a project value the standard recognises ({2}%)." -f $conforming.Count, $all.Count, $percent)
+    Write-Host ("  Recognised values: {0}. There is no 'shared' value -- a resource belonging" -f ($script:KnownProjects -join ', '))
+    Write-Host   "  to no single project carries no project tag, so it counts as untagged here."
 
     Write-Section 'By resource type'
     $all | Group-Object Kind | Sort-Object Name | ForEach-Object {
@@ -1416,9 +1421,8 @@ function Write-ProjectTagReport {
             Kind          = $_.Name
             Total         = $rows.Count
             Conforming    = @($rows | Where-Object { $_.Status -eq 'conforming' }).Count
-            Shared        = @($rows | Where-Object { $_.Status -eq 'shared' }).Count
             Nonconforming = @($rows | Where-Object { $_.Status -eq 'nonconforming' }).Count
-            Missing       = @($rows | Where-Object { $_.Status -eq 'missing' }).Count
+            Untagged      = @($rows | Where-Object { $_.Status -eq 'untagged' }).Count
         }
     } | Format-Table -AutoSize | Out-String | Write-Host
 
@@ -1435,18 +1439,18 @@ function Write-ProjectTagReport {
         }
     }
 
-    Write-Section 'Missing by resource type'
-    if ($missing.Count -eq 0) { Write-Host '  none' }
+    Write-Section 'Untagged by resource type'
+    if ($untagged.Count -eq 0) { Write-Host '  none' }
     else {
-        $missing | Group-Object Kind | Sort-Object Count -Descending |
+        $untagged | Group-Object Kind | Sort-Object Count -Descending |
             Select-Object @{ n = 'Kind'; e = { $_.Name } }, Count |
             Format-Table -AutoSize | Out-String | Write-Host
         if (-not $ListArns) { Write-Host '  Re-run with -ListArns for the individual ARNs.' }
     }
 
-    if ($ListArns -and $missing.Count -gt 0) {
-        Write-Section 'Missing ARNs'
-        $missing | Sort-Object Kind, Arn | ForEach-Object {
+    if ($ListArns -and $untagged.Count -gt 0) {
+        Write-Section 'Untagged ARNs'
+        $untagged | Sort-Object Kind, Arn | ForEach-Object {
             if ($_.Note) { Write-Host ('  {0}  ({1})' -f $_.Arn, $_.Note) }
             else         { Write-Host "  $($_.Arn)" }
         }
@@ -1457,9 +1461,14 @@ function Write-ProjectTagReport {
         @('A missing or wrong project tag denies access rather than over-granting,',
           'because the policies that condition on it fail closed. Run this and read',
           'it immediately before any policy change that conditions on the tag.'),
-        @('nonconforming is the dangerous bucket, not missing. A resource tagged',
+        @('nonconforming is the dangerous bucket, not untagged. A resource tagged',
           'with an unrecognised value looks correct in the console and still fails',
-          'to match the policy.'),
+          'to match the policy. The retired value shared now lands here too.'),
+        @('untagged mixes two cases and this script cannot separate them: a',
+          'resource that belongs to no single project, which is correct and',
+          'wants no tag, and one nobody has classified yet, which is a gap.',
+          'Judge by resource type -- the shared platform and the shared',
+          'database are the former.'),
         @('On the three machine IAM role families the tag is inventory and cost',
           'allocation only -- policies name the project literally rather than',
           'self-referencing the principal tag -- so a gap there is a hygiene',
