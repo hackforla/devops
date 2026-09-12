@@ -126,8 +126,9 @@ The standard is
 [DR-Machine-to-machine-IAM-scoping](https://github.com/hackforla/devops/wiki/DR-Machine-to-machine-IAM-scoping)
 on the devops wiki. It defines the tag value as the Hack for LA **project** name
 — `vrms`, `home-unite-us`, `people-depot`, `civic-tech-jobs`, `civictechindex` —
-never an application, environment or repository name, plus `shared` for
-infrastructure belonging to no single project.
+never an application, environment or repository name. **There is no `shared`
+value.** The standard carried one until 2026-09-12 and retired it: infrastructure
+belonging to no single project now carries no `project` tag at all.
 
 **Why this matters more than the `managed-by` report.** The machine roles in
 [hackforla/incubator#206](https://github.com/hackforla/incubator/issues/206) are
@@ -136,15 +137,23 @@ fails closed**. A resource whose tag is missing or wrong is not over-shared; it
 becomes unreachable. Run this and read it immediately before any policy change
 that conditions on the tag.
 
-Four outcomes per resource:
+Three outcomes per resource:
 
 - **`conforming`** — carries a value the standard recognises.
-- **`shared`** — carries `shared`, i.e. deliberately belongs to no one project.
 - **`nonconforming`** — carries a value that is *not* in the standard. **This is
-  the dangerous bucket, not `missing`.** Such a resource looks correctly tagged
+  the dangerous bucket, not `untagged`.** Such a resource looks correctly tagged
   in the console and still fails to match a policy, so it is always listed in
-  full rather than summarised.
-- **`missing`** — carries no `project` tag at all.
+  full rather than summarised. The retired `shared` value lands here if it ever
+  appears, which is intended.
+- **`untagged`** — carries no `project` tag at all.
+
+**`untagged` mixes two cases and the script cannot separate them.** Since the
+`shared` value was retired, an absent tag means either that the resource
+belongs to no single project — correct, and it wants no tag — or that nobody
+has classified it yet, which is a real gap. Telling them apart is a judgement
+per resource type, not something the report can do: the shared platform (VPC,
+load balancer, ECS cluster) and the shared database's log groups are the former.
+This is the cost of retiring `shared`, and it was accepted deliberately.
 
 Two things the report deliberately does *not* treat as equivalent:
 
