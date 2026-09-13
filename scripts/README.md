@@ -125,7 +125,7 @@ different question:
 The standard is
 [DR-Machine-to-machine-IAM-scoping](https://github.com/hackforla/devops/wiki/DR-Machine-to-machine-IAM-scoping)
 on the devops wiki. It defines the tag value as the Hack for LA **project** name
-— `vrms`, `home-unite-us`, `people-depot`, `civic-tech-jobs`, `civictechindex` —
+— `vrms`, `home-unite-us`, `people-depot`, `civic-tech-jobs`, `civic-tech-index` —
 never an application, environment or repository name. **There is no `shared`
 value.** The standard carried one until 2026-09-12 and retired it: infrastructure
 belonging to no single project now carries no `project` tag at all.

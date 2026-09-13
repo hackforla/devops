@@ -98,7 +98,7 @@ $script:ReadOnlyVerbPattern = '^(describe|list|get)-'
 # nonconforming if it ever appears -- which is intended, not an oversight.
 $script:ProjectTagKey = 'project'
 $script:KnownProjects = @('vrms', 'home-unite-us', 'people-depot',
-                          'civic-tech-jobs', 'civictechindex')
+                          'civic-tech-jobs', 'civic-tech-index')
 
 # The three machine role families the standard names. Matched on name because
 # nothing else distinguishes them, and the shared execution role's name is
