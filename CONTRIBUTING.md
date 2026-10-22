@@ -27,16 +27,21 @@ The following guidelines are for contributing to the devops repository hosted on
     - [**Why incubator pull requests from a fork cannot be accepted**](#why-incubator-pull-requests-from-a-fork-cannot-be-accepted)
     - [**Getting write access**](#getting-write-access)
   - [**Setting up the local development environment**](#setting-up-the-local-development-environment)
-  - [**Clone (Create) a copy on your computer**](#clone-create-a-copy-on-your-computer)
-    - [Clone repo (1): Create `hackforla` folder](#clone-repo-1-create-hackforla-folder)
-    - [Clone repo (2): Verify `origin` remote url](#clone-repo-2-verify-origin-remote-url)
-  - [**Working on an issue**](#working-on-an-issue)
-    - [**Working on an issue (1): Verify current branch is `master`**](#working-on-an-issue-1-verify-current-branch-is-master)
-    - [**Working on an issue (2): Create a new branch where you will work on your issue**](#working-on-an-issue-2-create-a-new-branch-where-you-will-work-on-your-issue)
-    - [Branch name convention](#branch-name-convention)
-    - [**Working on an issue (3): Prepare your changes to push to the repository**](#working-on-an-issue-3-prepare-your-changes-to-push-to-the-repository)
-    - [**Working on an issue (4): Pulling the latest changes before you push**](#working-on-an-issue-4-pulling-the-latest-changes-before-you-push)
-  - [**Making a pull request**](#making-a-pull-request)
+    - [**Clone (Create) a copy on your computer**](#clone-create-a-copy-on-your-computer)
+      - [Clone repo (1): Create `hackforla` folder](#clone-repo-1-create-hackforla-folder)
+      - [Clone repo (2): Verify `origin` remote url](#clone-repo-2-verify-origin-remote-url)
+    - [**Working on an issue**](#working-on-an-issue)
+      - [**Working on an issue (1): Verify current branch is `master`**](#working-on-an-issue-1-verify-current-branch-is-master)
+      - [**Working on an issue (2): Create a new branch where you will work on your issue**](#working-on-an-issue-2-create-a-new-branch-where-you-will-work-on-your-issue)
+      - [Branch name convention](#branch-name-convention)
+      - [**Working on an issue (3): Prepare your changes to push to the repository**](#working-on-an-issue-3-prepare-your-changes-to-push-to-the-repository)
+        - [**i. Prepare repo changes (1): Use the `git add` command to stage your changes.**](#i-prepare-repo-changes-1-use-the-git-add-command-to-stage-your-changes)
+        - [**ii. Prepare repos changes (2): Use the `git status` command to see what files are staged.**](#ii-prepare-repos-changes-2-use-the-git-status-command-to-see-what-files-are-staged)
+        - [**iii. Prepare repos changes (3): Use the `git commit` command**](#iii-prepare-repos-changes-3-use-the-git-commit-command)
+      - [**Working on an issue (4): Pulling the latest changes before you push**](#working-on-an-issue-4-pulling-the-latest-changes-before-you-push)
+    - [**Making a pull request**](#making-a-pull-request)
+        - [**i. Complete pull request (1): Update pull request title**](#i-complete-pull-request-1-update-pull-request-title)
+        - [**ii. Complete pull request (2): Explain the changes you made, then explain why these changes were needed**](#ii-complete-pull-request-2-explain-the-changes-you-made-then-explain-why-these-changes-were-needed)
 
 ## **Do not fork the repository**
 
@@ -62,7 +67,8 @@ That plan comment is the *only* thing a reviewer has to look at — it is how we
 
 ### **Getting write access**
 
-Because you are pushing branches to the Hack for LA repository, you need write access to it. If `git push` is rejected with a permission error, that is what is missing — ask a [DevOps CoP Lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel.
+Because you are pushing branches to the Hack for LA repository, you need write access to it. If `git push` is rejected with a permission error, that is what is missing. Write access is not something you request on its own, and asking a lead for it will not get you added. It comes with actually [joining the DevOps Community of Practice](https://github.com/hackforla/devops/wiki#joining-the-devops-team) — say hello in the [#ops](https://hackforla.slack.com/archives/CV7QGL66B) Slack channel, start coming to the weekly CoP meeting, and a [lead](https://github.com/hackforla/devops/wiki/Community#devops-community-of-practice-cop-leads) adds you once you are taking part. 
+
 
 <sub>[Back to Table of Contents](#table-of-contents)</sub>
 
